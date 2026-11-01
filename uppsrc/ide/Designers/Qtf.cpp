@@ -1,3 +1,4 @@
+#ifdef flagGUI
 #include "Designers.h"
 
 struct IdeQtfEditPos : Moveable<IdeQtfEditPos> {
@@ -49,6 +50,11 @@ void IdeQtfDes::Save()
 void IdeQtfDes::EditMenu(Bar& menu)
 {
 	EditTools(menu);
+	menu.Separator();
+	menu.Add("Export to PDF..", IdeCommonImg::pdf(), [=] { ExportPdf(*this); });
+	menu.Add("Export as GitHub Markdown..", IdeCommonImg::MD(), [=] {
+		ExportMarkdown(GetQTF(), GetFileTitle(filename));
+	});
 }
 
 void IdeQtfDes::Serialize(Stream& s)
@@ -127,3 +133,4 @@ INITIALIZER(Qtf)
 	RegisterIdeModule(Single<QtfDesModule>());
 	RegisterGlobalConfig("qtfdes-ctrl");
 }
+#endif // flagGUI

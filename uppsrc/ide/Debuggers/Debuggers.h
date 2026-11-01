@@ -21,6 +21,7 @@ void   KillDebugTTY();
 bool   TTYQuit();
 
 String GdbCommand(bool console);
+String LLDBCommand(bool console);
 
 int CharFilterReSlash(int c);
 
@@ -104,6 +105,7 @@ void MarkChanged(const VectorMap<String, String>& m, ArrayCtrl& data);
 #define GDB_PROMPT "<u++dbg-" "q98klwr835f427>"
 
 #include "Gdb.h"
+#include "LLDB.h"
 
 #define KEYGROUPNAME "Debugger"
 #define KEYNAMESPACE PdbKeys

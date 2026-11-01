@@ -1,6 +1,14 @@
 #ifndef IDE_H
 #define IDE_H
 
+#include <Core/Core.h>
+#include <Draw/Draw.h>
+
+#include <ide/MainCtrl/About.h>
+#include <ide/MainCtrl/version.h>
+
+#ifdef flagGUI
+
 #include <RichEdit/RichEdit.h>
 
 #include <ide/Common/Common.h>
@@ -20,23 +28,26 @@
 #include <ide/Designers/Designers.h>
 #include <ide/Android/Android.h>
 #include <plugin/md/Markdown.h>
+#include <ide/MCP/MCP.h>
+#ifndef flagV1
+#include <ide/AI/AI.h>
+#include <ide/Shell/Shell.h>
+#endif
 
-#include "About.h"
-#include "MethodsCtrls.h"
+#include <ide/MainCtrl/MethodsCtrls.h>
+#include <ide/MainCtrl/MainBootstrap.h>
 
-#define LAYOUTFILE <ide/ide.lay>
+#define LAYOUTFILE <ide/MainCtrl/ide.lay>
 #include <CtrlCore/lay.h>
 
 #define IMAGECLASS IdeImg
-#define IMAGEFILE  <ide/ide.iml>
+#define IMAGEFILE  <ide/MainCtrl/ide.iml>
 #include <Draw/iml_header.h>
 
 #define KEYGROUPNAME "Ide"
 #define KEYNAMESPACE IdeKeys
-#define KEYFILE      <ide/ide.key>
+#define KEYFILE      <ide/MainCtrl/ide.key>
 #include             <CtrlLib/key_header.h>
-
-#include "version.h"
 
 #include <ide/Builders/Builders.h>
 
@@ -44,11 +55,9 @@ const char *FindTag(const char *txt, const char *tag);
 const char *FindAfter(const char *txt, const char *tag);
 int         IdeLocateLine(String old_file, int old_line, String new_file);
 
-#include "UppDlg.h"
+#include <ide/MainCtrl/UppDlg.h>
 
 bool IsTextFile(const String& file, int maxline = INT_MAX);
-
-void Puts(const char *s);
 
 Display& BoldDisplay();
 
@@ -133,6 +142,7 @@ public:
 	void Kill();
 	void ClearError()                         { error_keys.Clear(); line.Clear(); WhenRunEnd(); }
 	Vector<String> PickErrors()               { Vector<String> e = pick(error_keys); error_keys.Clear(); return pick(e); }
+	bool GetError() const                     { return !error_keys.IsEmpty(); }
 	void Wait(int slot);
 	bool Wait();
 
@@ -291,6 +301,7 @@ struct EditorTabBar : public FileTabs {
 };
 
 int    memcmp_i(const char *s, const char *t, int n);
+int    GetMatchLen(const char *s, const char *t);
 
 String ResolveTParam(const String& type, const Vector<String>& tparam);
 void   ResolveTParam(Vector<String>& type, const Vector<String>& tparam);
@@ -309,7 +320,7 @@ void   InsertPath(EditString *es);
 
 void   DlSpellerLangs(DropList& dl);
 
-#include "Assist.h"
+#include <ide/MainCtrl/Assist.h>
 
 void FileSelect(Ctrl& t, Button& b, Event<> ev, const char *types, bool saveas);
 void FileSelectSaveAs(Ctrl& t, Button& b, Event<> ev, const char *types = NULL);
@@ -364,6 +375,8 @@ int ApplyChanges(LineEdit& editor, const String& new_content);
 
 struct RepoDiff;
 
+#include <ide/MainCtrl/AiProvider.h>
+
 struct Ide : public TopWindow, public WorkspaceWork, public IdeContext, public MakeBuild {
 public:
 	virtual   void   Paint(Draw& w);
@@ -407,9 +420,10 @@ public:
 	virtual   void             IdeConsoleFlush();
 	virtual   void             IdeConsoleBeginGroup(String group);
 	virtual   void             IdeConsoleEndGroup();
-	virtual   bool             IdeConsoleWait();
-	virtual   bool             IdeConsoleWait(int slot);
-	virtual   void             IdeConsoleOnFinish(Event<>  cb);
+		virtual bool             IdeConsoleWait();
+		virtual bool             IdeConsoleWait(int slot);
+		virtual bool             IdeConsoleGetError();
+		virtual void             IdeConsoleOnFinish(Event<>  cb);
 	virtual   void             IdeProcessEvents();
 
 	virtual   bool      IdeIsDebug() const;
@@ -482,6 +496,8 @@ public:
 	FileIn           view_file2;
 	EditorTabBar     tabs;
 	EscValue         macro_api;
+	Event<Bar&>      addon_menu;
+	Ptr<Ctrl>        addon_ctrl;
 
 	RightTabs   btabs;
 	int         error_tab_i = 0; // index of btabs "Errors"
@@ -493,7 +509,7 @@ public:
 		Button freplace;
 		Button fdelete;
 		Image  icon;
-		
+
 		FoundList();
 	};
 
@@ -508,12 +524,23 @@ public:
 	Vector<String> linking_line;
 	bool        removing_notes;
 
+	#ifndef flagV1
+	ConsoleCtrl calc;
+	IdeAgent	agent;
+	#else
 	IdeCalc     calc;
+	#endif
+	bool        calc_in_menubar = true;
 	Ptr<Ctrl>   bottomctrl; // debugger pane
 
-	enum Bottoms { BCLOSE, BCONSOLE, BERRORS, BCALC, BDEBUG, BFINDINFILES1, BFINDINFILES2, BFINDINFILES3 };
+	enum Bottoms { BCLOSE, BCONSOLE, BERRORS, BCALC,
+		#ifndef flagV1
+		BAGENT,
+		#endif
+		BDEBUG, BFINDINFILES1, BFINDINFILES2, BFINDINFILES3 };
 
 	FileOut    stdout_fout;
+	Stream*    console_capture = nullptr; // For capturing console output in test modes
 
 	Splitter      editorsplit;
 	Splitter      pfsplit;
@@ -577,6 +604,7 @@ public:
 	ArrayMap<String, FileData> filedata;
 	Index<String> editastext;
 	Index<String> editashex;
+	bool editassolver = false;
 
 	Vector<String> difflru;
 
@@ -604,6 +632,7 @@ public:
 	bool      disable_uhd = false;
 	bool      darkmode = false;
 	bool      minimize = false;
+	int       scale = 0;
 	String    stdout_file;
 	String    recent_stdout_file;
 
@@ -670,6 +699,12 @@ public:
 	bool      win_deactivated = false;
 	bool      block_caret = false;
 	bool      bar_branch = true;
+	int       audio_src = -1;
+	bool      autostart_audio_src = false;
+	double    audio_timelimit = 1.0;
+	double    audio_volumetreshold = 0.1;
+	bool      mcp_server_enabled = false;
+	int       mcp_server_port = 7326;
 	bool      search_downloads =
 #ifdef PLATFORM_MACOS
 		false
@@ -677,7 +712,7 @@ public:
 		true
 #endif
 	;
-		
+
 
 	// Formats editor's code with Ide format parameters
 	void FormatJSON_XML(bool xml);
@@ -727,7 +762,7 @@ public:
 	int           animate_autocomplete = 0, animate_autocomplete_dir = 0;
 	int           animate_indexer = 0, animate_indexer_dir = 0;
 	int           animate_phase = 0;
-	
+
 	Vector<Ptr<TopWindow>> window;
 	
 	void          NewWindow(TopWindow *win);
@@ -787,6 +822,7 @@ public:
 	void      EditFile0(const String& path, byte charset, int spellcheck_comments,
 	                    const String& headername = Null, bool reloading = false);
 	void      EditFile(const String& path);
+	void      EditDesigner();
 	void      AddEditFile(const String& path);
 	void      ReloadFile();
 	void      AddLru();
@@ -846,7 +882,7 @@ public:
 		void   Print();
 		void   DoDiff(FileDiff *diffdlg);
 		void   Diff();
-		void   DiffWith(const String& path);
+		void   DiffWith(const String& path, const Image& icon);
 		void   DiffFiles(const char *lname, const String& l, const char *rname, const String& r);
 		String LoadConflictFile(const String& n);
 
@@ -854,6 +890,7 @@ public:
 		bool  IsDesignerFile(const String& path);
 		void  DoEditAsText(const String& path);
 		void  EditAsText();
+		void  EditUsingSolver();
 		void  EditAsHex();
 		void  EditUsingDesigner();
 		void  EditMakeTabs()     { editor.MakeTabsOrSpaces(true); }
@@ -1000,6 +1037,7 @@ public:
 
 	void      AssistMenu(Bar& menu);
 	void      BrowseMenu(Bar& menu);
+	void      AIMenu(Bar& menu);
 		void  QueryId();
 		void  OpenTopic(const String& topic, const String& create_id, bool before);
 		void  OpenTopic(const String& topic);
@@ -1016,7 +1054,12 @@ public:
 		void  UsageId(const String& name, const String& id, const Index<String>& ids, bool istype, bool isstatic, Index<String>& unique);
 		void  Usage();
 		void  IdUsage();
+		bool  IsLocalAtCursor(const String& id, Point ref_pos);
+		void  GetGlobalUsageIds(const String& id, bool& isvirtual, bool& isstatic, bool& istype, Index<String>& ids);
 		void  Usage(const String& id, const String& name, Point ref_pos);
+		void  DoUsageTree(String parent_id, String id, String fn, Point mpos, String name, Index<String>& unique,
+		                  int& lvl, String& current, Index<String>& done);
+		void  UsageTree();
 		bool  OpenLink(const String& s, int pos);
 		String GetRefId(int pos, String& name, Point& ref_pos);
 		void  ContextGoto0(int pos);
@@ -1039,7 +1082,13 @@ public:
 		void  FindGitConflicts();
 		void  FindDesignerItemReferences(const String& id, const String& name);
 		void  NavigatorDlg();
+	#ifndef flagV1
 		void  InsertParameters();
+	#endif
+	#ifndef flagV1
+		void  OpenVfsDlg();
+		void  OpenAITaskDlg();
+	#endif
 
 	void      HelpMenu(Bar& menu);
 	    void  ViewIdeLogFile();
@@ -1081,6 +1130,8 @@ public:
 	String    GetTargetLogPath();
 	String    GetIdeLogPath();
 	void      OpenLog(const String& logFilePath);
+	bool      IsInLogFile();
+	bool      FindLOG();
 
 	String    include_path; // cached value of include path, GetIncludePath
 
@@ -1295,11 +1346,9 @@ public:
 	~Ide();
 };
 
-void ForAllSourceFiles(Event<const VectorMap<String, String>&> fn);
-void ForAllNests(Event<const Vector<String>&> fn);
-
 void StartIdeBackgroundThread();
 void TriggerIdeBackgroundThread(int delay_ms = 1000);
+void StartIdeMcpThread();
 
 inline Ide *TheIde()      { return (Ide *)TheIdeContext(); }
 
@@ -1316,10 +1365,10 @@ void HighlightLine(const String& path, Vector<LineEdit::Highlight>& hln, const W
 
 String GetGitBranchRaw(const String& dir);
 
-Index<String> GetAllNests(bool sleep = false);
-
 bool MapFlag(const VectorMap<class String, class String>& map, const char *key);
 
-#include "urepo.h"
+#include <ide/MainCtrl/urepo.h>
+
+#endif // flagGUI
 
 #endif

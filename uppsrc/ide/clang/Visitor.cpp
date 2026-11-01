@@ -26,15 +26,23 @@ class ClangCursorInfo {
 	bool         hasid = false;
 	String       id;
 
+	bool         hastypehash = false;
+	bool         typebuiltin = false;
+	hash_t       typehash = 0;
+
 public:
 	int          Kind()                      { return cursorKind; }
 	String       RawId();
 	String       Scope();
 	String       Nspace()                    { Scope(); return nspace; }
 	String       Type();
+	String       TypeDeclaration();
+	String       ParentTypeDeclaration();
 	String       Name();
 	String       Id();
 	String       Bases();
+	hash_t       TypeHash();
+	bool         TypeBuiltin();
 	
 	CXCursor     GetCursor()                 { return cursor; }
 
@@ -66,6 +74,83 @@ String ClangCursorInfo::Type()
 		hastype = true;
 	}
 	return type;
+}
+
+force_inline
+bool ClangCursorInfo::TypeBuiltin()
+{
+	TypeHash(); // refresh 'typebuiltin' value
+	return typebuiltin;
+}
+
+force_inline
+hash_t ClangCursorInfo::TypeHash()
+{
+	if(!hastypehash) {
+		if (IsTypeDecl(cursorKind) || cursorKind == CXCursor_MacroDefinition) {
+			typehash = clang_hashCursor(cursor);
+		}
+		else if (IsTypeRef(cursorKind) || cursorKind == CXCursor_MacroExpansion) {
+			CXCursor ref = clang_getCursorReferenced(cursor);
+			if (IsTypeDecl(ref.kind) ||
+				ref.kind == CXCursor_MacroDefinition ||
+				ref.kind == CXCursor_LabelStmt) {
+				typehash = clang_hashCursor(ref);
+			}
+			else if (IsVariable(ref.kind)) {
+				CXType type = clang_getCursorType(cursor);
+				CXCursor type_decl = clang_getTypeDeclaration(type);
+				typehash = clang_hashCursor(type_decl);
+			}
+			else if (IsErrorKind(ref.kind)) {
+				// Invalid macro usage can't pass, and can be used as "very unique type"
+				typehash = clang_hashCursor(cursor);
+			}
+			else {
+				#ifdef flagDEBUG
+				TODO;
+				#else
+				RLOG("ClangCursorInfo::TypeHash: error: invalid clang kind: " << GetCursorSpelling(ref) << ": (" << (int)ref.kind << ")");
+				#endif
+			}
+		}
+		else {
+			CXType type = clang_getCursorType(cursor);
+			CXCursor type_decl = clang_getTypeDeclaration(type);
+			if (type.kind == CXType_Invalid)
+				typehash = 0;
+			else if (type_decl.kind == CXCursor_NoDeclFound && type.kind != CXType_Invalid) {
+				CombineHash c;
+				c.Put(type.kind).Put((int64)type.data[0]).Put((int64)type.data[1]);
+				typehash = (hash_t)c;
+				typebuiltin = true;
+			}
+			else if (IsTypeDecl(type_decl.kind))
+				typehash = clang_hashCursor(type_decl);
+			else {
+				String type_str = Type();
+				if (type_str.IsEmpty())
+					typehash = 0;
+				else
+					typehash = type_str.GetHashValue();
+				typebuiltin = true;
+			}
+		}
+		hastypehash = true;
+	}
+	return typehash;
+}
+
+force_inline
+String ClangCursorInfo::TypeDeclaration()
+{
+	return GetTypeDeclarationSpelling(cursor);
+}
+
+force_inline
+String ClangCursorInfo::ParentTypeDeclaration()
+{
+	return GetTypeDeclarationSpelling(parent);
 }
 
 force_inline
@@ -222,10 +307,32 @@ ClangVisitor::CXLocation ClangVisitor::GetLocation(CXSourceLocation cxlocation)
 	return p;
 }
 
-SourceLocation ClangVisitor::GetSourceLocation(const CXLocation& p)
+ClangVisitor::CXRange ClangVisitor::GetRange(CXSourceRange cxrange)
+{
+	CXSourceLocation cxlocation0 = clang_getRangeStart(cxrange);
+	CXSourceLocation cxlocation1 = clang_getRangeEnd(cxrange);
+	CXFile file;
+	CXRange r;
+	unsigned line;
+	unsigned column;
+	unsigned offset;
+	clang_getExpansionLocation(cxlocation0, &file, &line, &column, &offset);
+	r.p0.pos.x = int(column - 1);
+	r.p0.pos.y = int(line - 1);
+	r.p0.file = file;
+	clang_getExpansionLocation(cxlocation1, &file, &line, &column, &offset);
+	r.p1.pos.x = int(column - 1);
+	r.p1.pos.y = int(line - 1);
+	r.p1.file = file;
+	return r;
+}
+
+SourceLocation ClangVisitor::GetSourceLocation(const CXLocation& p, const CXRange& r)
 {
 	SourceLocation l;
 	l.pos = p.pos;
+	l.begin = r.p0.pos;
+	l.end = r.p1.pos;
 	int q = cxfile.Find(p.file);
 	if(q >= 0)
 		l.path = cxfile[q];
@@ -239,7 +346,8 @@ SourceLocation ClangVisitor::GetSourceLocation(const CXLocation& p)
 bool ClangVisitor::ProcessNode(CXCursor cursor)
 {
 	CXSourceLocation cxlocation = clang_getCursorLocation(cursor);
-
+	CXSourceRange cxrange = clang_getCursorExtent(cursor);
+	
 	ClangCursorInfo ci(cursor, pp_id);
 
 #ifdef DUMPTREE
@@ -268,12 +376,13 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 
 
 	CXLocation loc = GetLocation(cxlocation);
+	CXRange ran = GetRange(cxrange);
 
 	SourceLocation sl;
 	bool sl_loaded = false;
 	auto LoadSourceLocation = [&] {
 		if(sl_loaded) return;
-		sl = GetSourceLocation(loc);
+		sl = GetSourceLocation(loc, ran);
 		sl_loaded = true;
 	};
 
@@ -298,20 +407,91 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 	if(!active_file)
 		return findarg(ci.Kind(), CXCursor_FunctionTemplate, CXCursor_FunctionDecl, CXCursor_Constructor,
 		                          CXCursor_Destructor, CXCursor_CXXMethod, CXCursor_UsingDeclaration, CXCursor_VarDecl, CXCursor_EnumConstantDecl,
-		                          CXCursor_TypeAliasTemplateDecl, CXCursor_EnumDecl, CXCursor_ConversionFunction) < 0;
-
+		                          CXCursor_TypeAliasTemplateDecl, CXCursor_EnumDecl, CXCursor_ConversionFunction,
+		                          CXCursor_CallExpr, CXCursor_ReturnStmt) < 0;
+	
+	
 	CXCursor ref = clang_getCursorReferenced(cursor);
 
 	String id = ci.Id();
+	String name = ci.Name();
+	String type = ci.Type();
 	int kind = ci.Kind();
+	
+	ClangNode* np = 0;
+	if (kind != CXCursor_OverloadCandidate) {
+		if (scope.IsEmpty()) {
+			Logw() << "ClangVisitor::ProcessNode: warning: scope is empty\n";
+			return false;
+		}
+		ClangNode& n = *scope.Top();
+		np = &n;
+		LoadSourceLocation();
+		n.kind = kind;
+		if (n.kind == CXCursor_TemplateRef) {
+			ClangCursorInfo tmpl_ci(ref, pp_id);
+			CXSourceLocation cxlocation = clang_getCursorLocation(ref);
+			CXSourceRange cxrange = clang_getCursorExtent(ref);
+			CXLocation loc = GetLocation(cxlocation);
+			CXRange ran = GetRange(cxrange);
+			SourceLocation tmpl_sl = GetSourceLocation(loc, ran);
+			n.id = tmpl_ci.Id();
+			n.type = tmpl_ci.Type();
+			n.type_hash = ci.TypeHash();
+			ASSERT(n.type_hash);
+			n.filepos_hash = tmpl_sl.GetHashValue();
+		}
+		else {
+			if (id.GetCount())
+				n.id = id;
+			else if (name.GetCount())
+				n.id = name;
+			if (type.GetCount())
+				n.type = type;
+			else
+				n.type = ci.TypeDeclaration();
+			n.filepos_hash = sl.GetHashValue();
+			n.type_hash = ci.TypeHash();
+		}
+		n.type_hash = ci.TypeHash();
+		n.is_type_builtin = ci.TypeBuiltin();
+		n.begin = sl.begin;
+		n.end = sl.end;
+		n.is_definition = clang_isCursorDefinition(cursor);
+		if (!n.is_definition) {
+			if (n.kind == CXCursor_ClassTemplate)
+				n.is_definition = true;
+		}
+	}
+	
+	if (kind == CXCursor_ReturnStmt) {
+		LoadSourceLocation();
+		StatementItem rm;
+		rm.kind = ci.Kind();
+		rm.begin = sl.begin;
+		rm.end = sl.end;
+		info.GetAdd(sl.path).stmts.Add(rm);
+	}
 	if(id.GetCount()) {
+		parent_id = id;
 		LoadSourceLocation();
 		CppFileInfo& f = info.GetAdd(sl.path);
 		AnnotationItem& r = locals ? f.locals.Add() : f.items.Add();
 		r.kind = kind;
 		r.name = ci.Name();
-		r.type = ci.Type();
+		if (r.kind == CXCursor_CXXMethod ||
+			r.kind == CXCursor_Constructor ||
+			r.kind == CXCursor_Destructor ||
+			r.kind == CXCursor_ClassDecl) {
+			r.parent_type = ci.ParentTypeDeclaration();
+		}
+		if (r.kind == CXCursor_VarDecl)
+			r.type = ci.TypeDeclaration();
+		else
+			r.type = ci.Type();
 		r.pos = loc.pos;
+		r.begin = ran.p0.pos;
+		r.end = ran.p1.pos;
 		r.id = id;
 		if(kind == CXCursor_MacroDefinition)
 			r.pretty0 = r.pretty = r.name;
@@ -323,7 +503,7 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 		r.nspace = ci.Nspace();
 		r.bases = ci.Bases();
 		r.isvirtual = kind == CXCursor_CXXMethod && clang_CXXMethod_isVirtual(cursor);
-		r.isstatic = (IsFunction(r.kind) || IsVariable(r.kind)) && clang_Cursor_getStorageClass(cursor) == CX_SC_Static;
+		r.isstatic = (IsFunction(r.kind) || IsVariable(r.kind)) && !IsPreprocessingCursor(cursor) && clang_Cursor_getStorageClass(cursor) == CX_SC_Static;
 
 		if(findarg(r.kind, CXCursor_Constructor, CXCursor_Destructor) >= 0) {
 			int q = r.id.Find('(');
@@ -334,11 +514,10 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 			}
 		}
 		else {
-			static String op = "operator";
-			int q = FindId(r.id, r.kind == CXCursor_ConversionFunction ? String("operator") : r.name);
-			if(q >= 0) {
-				r.nest = r.id.Mid(0, q);
-				r.nest.TrimEnd("::");
+		        static String op = "operator";
+		        int q = FindLastId(r.id, r.kind == CXCursor_ConversionFunction ? String("operator") : r.name);
+		        if(q >= 0) {
+		                r.nest = r.id.Mid(0, q);				r.nest.TrimEnd("::");
 			}
 			if(IsStruct(kind))
 				MergeWith(r.nest, "::", r.name);
@@ -354,16 +533,18 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 	if(!clang_Cursor_isNull(ref)) {
 		LoadSourceLocation();
 		auto AddRef = [&](CXCursor ref) {
-			SourceLocation ref_loc = GetSourceLocation(GetLocation(clang_getCursorLocation(ref)));
+			SourceLocation ref_loc = GetSourceLocation(GetLocation(clang_getCursorLocation(ref)), GetRange(clang_getCursorExtent(ref)));
 			int q = -1;
 			if(findarg(ci.Kind(), CXCursor_CXXBaseSpecifier, CXCursor_TemplateRef) < 0) // suppress template untyping for : WithDlgLayout<TopWindow>
 				q = tfn.Find(ref_loc);
 			ClangCursorInfo ref_ci(q >= 0 ? tfn[q].cursor : ref, pp_id);
-			
 			ReferenceItem rm;
+			rm.kind = ci.Kind();
 			rm.pos = sl.pos;
 			rm.id = ref_ci.Id();
+			rm.parent_id = parent_id;
 			rm.ref_pos = ref_loc.pos;
+			rm.macro = ref_ci.Kind() == CXCursor_MacroDefinition;
 		#if 0
 			DLOG("=======");
 			DDUMP(sl.pos);
@@ -381,6 +562,10 @@ bool ClangVisitor::ProcessNode(CXCursor cursor)
 			if(rm.id.GetCount() && rd.Find(rm) < 0) {
 				rd.Add(rm);
 				info.GetAdd(sl.path).refs.Add(rm);
+				if (np) {
+					np->is_ref = true;
+					np->filepos_hash = ref_loc.GetHashValue();
+				}
 			}
 		};
 		
@@ -404,9 +589,25 @@ CXChildVisitResult clang_visitor(CXCursor cursor, CXCursor p, CXClientData clien
 #endif
 	ClangVisitor *v = (ClangVisitor *)clientData;
 	bool bak_locals = v->locals;
-	if(v->ProcessNode(cursor))
+	String bak_parent_id = v->parent_id;
+
+	ClangNode* owner = v->scope.Top();
+	One<ClangNode> n;
+	n.Create();
+	v->scope.Add(&*n);
+
+	if(v->ProcessNode(cursor)) {
 		clang_visitChildren(cursor, clang_visitor, clientData);
+	}
+
+	if(n->kind >= 0)
+		owner->sub.Add(n.Detach());
+
+	if (!v->scope.IsEmpty())
+		v->scope.Pop();
+
 	v->locals = bak_locals;
+	v->parent_id = bak_parent_id;
 #ifdef DUMPTREE
 	LOGEND();
 #endif
@@ -415,6 +616,8 @@ CXChildVisitResult clang_visitor(CXCursor cursor, CXCursor p, CXClientData clien
 
 void ClangVisitor::Do(CXTranslationUnit tu)
 {
+	scope.Clear();
+	
 	if(!HasLibClang())
 		return;
 
@@ -448,7 +651,11 @@ void ClangVisitor::Do(CXTranslationUnit tu)
 	clang_PrintingPolicy_setProperty(pp_pretty, CXPrintingPolicy_SuppressScope, 1);
 
 	initialized = true;
+	ast.Clear();
+	ast.kind = CXCursor_Namespace;
+	scope.Add(&ast);
 	clang_visitChildren(cursor, clang_visitor, this);
+	scope.Clear();
 
 	for(CppFileInfo& f : info) { // sort by line because macros are first
 		Sort(f.items, [](const AnnotationItem& a, const AnnotationItem& b) {

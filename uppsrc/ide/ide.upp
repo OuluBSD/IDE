@@ -3,139 +3,79 @@ description "TheIDE main package\377";
 uses
 	ide\Common,
 	ide\Core,
-	ide\LayDes,
 	ide\Builders,
 	ide\Debuggers,
-	ide\Browser,
-	CodeEditor,
-	CtrlLib,
-	plugin\bz2,
-	HexView,
-	TextDiffCtrl,
-	TabBar,
-	ide/Designers,
-	ide/Android,
-	ide/Java,
-	ide/MacroManager,
-	Report,
 	Core/SSL,
-	plugin/md,
-	ide/clang;
+	plugin\bz2,
+	plugin/md;
+
+uses(GUI) ide/MainCtrl;
+
+uses(GUI) ide/clang;
+
+uses(GUI) ide\LayDes;
+
+uses(GUI) ide\Browser;
+
+uses(GUI) CodeEditor;
+
+uses(GUI) CtrlLib;
+
+uses(GUI) HexView;
+
+uses(GUI) TextDiffCtrl;
+
+uses(GUI) TabBar;
+
+uses(GUI) ide/Designers;
+
+uses(GUI) ide/Android;
+
+uses(GUI) ide/Java;
+
+uses(GUI) ide/MacroManager;
+
+uses(GUI) Report;
+
+uses(GUI & !V1) ide/Edit3D;
+
+uses(GUI) MCP;
+
+uses(GUI) ide/MCP;
+
+uses(GUI & !V1) DropTerm;
+
+uses(GUI & !V1) ide/Shell;
+
+uses(GUI & !V1) ide/AI;
 
 file
+	AGENTS.md,
 	IDE readonly separator,
 	ide.h options(BUILDER_OPTION) PCH,
-	ide.key,
-	version.h,
-	UppDlg.h,
-	BaseDlg.cpp,
-	SelectPkg.cpp,
-	UppWspc.cpp,
-	NewPackageFile.cpp,
-	Organizer.cpp,
-	Template.cpp,
-	Console.cpp,
-	FindFile.cpp,
-	FindInFiles.cpp,
-	Config.cpp,
-	ide.cpp,
-	idefile.cpp charset "UTF-8-BOM",
-	EditorTabBar.cpp,
-	Bottom.cpp,
-	t.cpp,
-	Assist.h,
-	AssistDisplay.cpp,
-	IncludeTrick.cpp,
-	Assist.cpp,
-	DCopy.cpp,
-	ContextGoto.cpp,
-	GoToLine.cpp,
-	Swaps.cpp,
-	Usage.cpp,
-	ParamInfo.cpp,
-	Navigator.cpp,
-	Annotations.cpp,
-	Virtuals.cpp,
-	Events.cpp,
-	NavDlg.cpp,
-	Log.cpp,
-	MainConfig.cpp,
-	Setup.cpp,
-	Custom.cpp,
-	Print.cpp,
-	InsertImage.cpp,
-	Insert.cpp,
-	Sequence.cpp,
-	idetool.cpp,
-	Install.cpp,
-	Android.cpp,
-	idebar.cpp,
-	background.cpp,
-	idewin.cpp,
 	main.cpp,
-	About.h,
 	BuildInfo.cpp,
-	About.cpp,
-	Macro.cpp,
-	Help.cpp,
-	SlideShow.cpp,
-	OnlineSearch.cpp,
-	Errors.cpp,
-	Calc.cpp,
-	FormatCode.cpp,
-	Abbr.cpp,
-	Qtf.cpp,
-	Xml.cpp,
-	Json.cpp,
-	MacroManager.cpp,
-	SetupGIT.cpp,
-	Upgrade.cpp,
-	UppHub.cpp,
-	Compile readonly separator,
-	MethodsCtrls.h,
-	MethodsCtrls.cpp,
-	Methods.h,
-	Methods.cpp,
-	AutoSetup.cpp,
-	InstantSetup.cpp,
-	OutputMode.cpp,
-	Build.cpp,
-	Debug.cpp,
-	Valgrind.cpp,
-	Export.cpp,
-	Repo readonly separator,
-	urepo.h,
-	RepoConsole.cpp readonly,
-	RepoSync.cpp,
-	Credentials.cpp,
-	Diff.cpp,
-	DirRepoDiff.cpp,
-	urepo.lay,
-	Resources readonly separator,
-	ide.lay,
-	ide.iml,
-	ide.usc,
-	app.tpp,
-	ide.rc
-		depends() xide.ico
-		depends() ide.ico,
-	theide.desktop,
+	AiProvider.inl highlight cpp,
 	Info readonly separator,
 	Copying;
 
 mainconfig
 	"" = "GUI",
-	"" = "GUI LCLANG",
-	"" = "GUI USEMALLOC",
-	"" = "GUI HEAPDBG CHECKINIT",
-	"" = "GUI TESTINSTALL",
-	"" = "GUI CHECKCLIPBOARD",
-	"" = "GUI PEAKMEM",
-	"" = "GUI HEAPLOG",
-	"" = "GUI X11",
-	"" = "GUI DEBUGCODE";
-
-custom() "",
-	"ASDFASDFASDF",
-	"$(OUTDIR)/$(FILE).obj";
-
+	"" = "GUI NET",
+	"" = "GUI NET CURL",
+	"" = "GUI NET CURL AUDIO",
+	"" = "GUI NET CURL AUDIO SYS_PORTAUDIO",
+	"" = "GUI NET CURL LCLANG",
+	"" = "GUI NET CURL LCLANG AUDIO SYS_PORTAUDIO",
+	"" = "GUI V1",
+	"" = "GUI V1 LCLANG",
+	"" = "GUI V1 USEMALLOC",
+	"" = "GUI V1 HEAPDBG CHECKINIT",
+	"" = "GUI V1 TESTINSTALL",
+	"" = "GUI V1 CHECKCLIPBOARD",
+	"" = "GUI V1 PEAKMEM",
+	"" = "GUI V1 HEAPLOG",
+	"" = "GUI V1 X11",
+	"" = "GUI V1 GTK WAYLAND",
+	"" = "GUI V1 DEBUGCODE",
+	"" = "";

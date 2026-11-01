@@ -1,155 +1,27 @@
 #include "ide.h"
 
-#define FUNCTION_NAME UPP_FUNCTION_NAME << "(): "
+#if defined(flagGUI) && !defined(flagV1)
+#include <DropTerm/DropTerm.h>
+#endif
 
-void DelTemps()
-{
-	FindFile ff(ConfigFile("*.tmp"));
-	while(ff) {
-		DeleteFile(ConfigFile(ff.GetName()));
-		ff.Next();
-	}
-}
+using namespace Upp;
+
+#define FUNCTION_NAME UPP_FUNCTION_NAME << "(): "
 
 #ifdef PLATFORM_WIN32
 #include <mmsystem.h>
 #pragma comment( lib, "winmm.lib" )
 #endif
 
-extern int MemoryProbeFlags;
-
 void Uninstall();
 
-bool SilentMode;
-
-#if defined(PLATFORM_WIN32)
-#include <wincon.h>
-
-void Puts(const char *s)
-{
-	dword dummy;
-	if(!SilentMode)
-		WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, (int)strlen(s), &dummy, NULL);
-}
-#endif
-
-
-#ifdef PLATFORM_POSIX
-void Puts(const char *s)
-{
-	if(!SilentMode)
-		puts(s);
-}
-#endif
+extern int MemoryProbeFlags;
 
 bool splash_screen;
 
-int CommaSpace(int c)
-{
-	return c == ',' ? ' ' : c;
-}
-
-void ReduceCfgCache()
-{
-	String cfgdir = ConfigFile("cfg");
-	FindFile ff(AppendFileName(cfgdir, "*.*"));
-	while(ff) {
-		if(ff.IsFile()) {
-			String fn = ff.GetName();
-			String ext = GetFileExt(fn);
-			if(ext != ".aux" && ext != ".cfg")
-				if((Date)Time(ff.GetLastAccessTime()) < GetSysDate() - 14)
-					DeleteFile(AppendFileName(cfgdir, fn));
-		}
-		ff.Next();
-	}
-}
-
-bool IsAssembly(const String& s)
-{
-	Vector<String> varlist;
-	for(FindFile ff(ConfigFile("*.var")); ff; ff.Next())
-		if(ff.IsFile())
-			if(GetFileTitle(ff.GetName()) == s)
-				return true;
-	Vector<String> l = Split(s, ',');
-	for(int i = 0; i < l.GetCount(); i++)
-		if(FindFile(NormalizePath(l[i])).IsFolder())
-			return true;
-	return false;
-}
-
-void StartEditorMode(const Vector<String>& args, Ide& ide, bool& clset)
-{
-	if(args.IsEmpty() || clset) {
-		return;
-	}
-	
-	bool editor = false;
-	for(int i = 0; i < args.GetCount(); i++) {
-		if(*args[i] != '-') {
-			String file_path = NormalizePath(args[i]);
-			
-			Logd() << FUNCTION_NAME << "Opening file \"" << file_path << "\".";
-			
-			ide.EditFile(file_path);
-			ide.FileSelected();
-			editor = true;
-		}
-	}
-	
-	if(editor) {
-		clset = true;
-		Vector<String> dir = Split(LoadFile(GetHomeDirFile("usc.path")), ';');
-		for(int i = 0; i < dir.GetCount(); i++)
-			ide.UscProcessDirDeep(dir[i]);
-		ide.EditorMode();
-	}
-}
-
-#ifdef DYNAMIC_LIBCLANG
-bool TryLoadLibClang()
-{
-#ifdef PLATFORM_MACOS
-	if(LoadLibClang(TrimBoth(Sys("xcode-select -p")) + "/usr/lib"))
-		return true;
-	if(LoadLibClang("/Library/Developer/CommandLineTools/usr/lib"))
-		return true;
-	if(LoadLibClang("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib"))
-		return true;
-#endif
-#ifdef FLATPAK
-	if(LoadLibClang("/app/lib"))
-		return true;
-#endif
-	// in Mint 21.1, clang installed is 14 but llvm defaults to 15
-	for(String s : Split(Sys("clang --version"), [](int c)->int { return !IsDigit(c); })) {
-		int n = Atoi(s);
-		if(n >= 5 && n < 5000) {
-			if(LoadLibClang("/usr/lib/llvm-" + AsString(n) + "/lib"))
-				return true;
-			break;
-		}
-	}
-
-	String libdir = TrimBoth(Sys("llvm-config --libdir"));
-	int q = FindIndex(CommandLine(), "--clangdir");
-	if(q >= 0 && q + 1 < CommandLine().GetCount()) {
-		libdir = CommandLine()[q + 1];
-		CommandLineRemove(q, 2);
-	}
-	if(LoadLibClang(libdir))
-		return true;
-	if(LoadLibClang("/usr/lib64"))
-		return true;
-	if(LoadLibClang("/usr/lib"))
-		return true;
-	for(int i = 200; i >= 10; i--)
-		if(LoadLibClang("/usr/lib/llvm-" + AsString(i) + "/lib"))
-			return true;
-	return false;
-}
-#endif
+#ifdef flagGUI
+#undef  GUI_APP_MAIN_HOOK
+#define GUI_APP_MAIN_HOOK
 
 char crash_file[2048];
 
@@ -162,7 +34,9 @@ void OnCrash()
 
 INITBLOCK { // libclang does not work in Linux unless this is set
 	SetEnv("LC_CTYPE", "en_US.UTF-8");
+#if HAVE_ALWAYS_THEIDE_CONFIG
 	SetConfigName("theide");
+#endif
 }
 
 #ifdef flagMAIN
@@ -217,13 +91,27 @@ void AppMain___()
 	Ctrl::SetDarkThemeEnabled();
 	Ctrl::SkinChangeSensitive();
 	Ctrl::SetAppName("TheIDE");
-
-	SetLanguage(LNG_ENGLISH);
+	
+	int lng = SetLNGCharset(GetSystemLNG(), CHARSET_UTF8);
+	if (FindIndex(CommandLine(), "--enus"))
+		lng = LNG_enUS;
+	SetLanguage(lng);
 	SetDefaultCharset(CHARSET_UTF8);
 
 	bool dosplash = true;
 	bool debug_exe_mode = false;
-	
+	bool uwp_test_mode = false;
+	bool uwp_prelaunch_mode = false;
+
+	// Check for --uwp-test and --uwp-prelaunch flags
+	for(int i = 0; i < CommandLine().GetCount(); i++) {
+		if(CommandLine()[i] == "--uwp-test") {
+			uwp_test_mode = true;
+		}
+		else if(CommandLine()[i] == "--uwp-prelaunch") {
+			uwp_prelaunch_mode = true;
+		}
+	}
 
 	Vector<String> arg = clone(CommandLine());
 	
@@ -280,6 +168,18 @@ void AppMain___()
 		else
 		if(ca == "--debug") {
 			debug_exe_mode = true;
+			arg.Remove(i);
+		}
+		else
+		if(ca == "--uwp-test") {
+			uwp_test_mode = true;
+			dosplash = false;
+			arg.Remove(i);
+		}
+		else
+		if(ca == "--uwp-prelaunch") {
+			uwp_prelaunch_mode = true;
+			dosplash = false;
 			arg.Remove(i);
 		}
 		else
@@ -392,6 +292,9 @@ void AppMain___()
 		}
 
 		Ide ide;
+		#ifndef flagV1
+		IdeDropdownTerminal dropdown;
+		#endif
 		SetTheIde(&ide);
 		ide.Maximize();
 		bool clset = false;
@@ -405,7 +308,12 @@ void AppMain___()
 
 		if(!ide.disable_custom_caption)
 			ide.CustomTitleBar();
-
+		
+		#ifndef flagV1
+		TaskMgr::Setup(&ide);
+		Engine::Setup("ide", 0, true);
+		#endif
+		
 		if(arg.GetCount() == 1) {
 			if(arg[0].EndsWith(".upp")) {
 				Vector<String> names = Split(arg[0], DIR_SEP);
@@ -423,7 +331,7 @@ void AppMain___()
 			}
 		}
 		else
-		if(arg.GetCount() == 2 && IsAssembly(arg[0])) {
+		if(arg.GetCount() >= 2 && IsAssembly(arg[0])) {
 				LoadVars(arg[0]);
 				ide.SetMain(arg[1]);
 				clset=true;
@@ -431,13 +339,20 @@ void AppMain___()
 		
 		ide.LoadAbbr();
 
+#ifdef PLATFORM_WIN32
+		if(HandleUwpPrelaunchCommandLine(arg, ide, clset, uwp_test_mode, uwp_prelaunch_mode))
+			return;
+#endif
+
 		DelTemps();
 
 #ifndef PLATFORM_COCOA // MacOS sends some weird things to app bundle - disable editor mode for now
 		StartEditorMode(arg, ide, clset);
 #endif
 
-		if(splash_screen && dosplash && !ide.IsEditorMode()) {
+		bool open_dropdown = FindIndex(CommandLine(), "--dropdown-terminal") >= 0 || FindIndex(CommandLine(), "--dropdown") >= 0;
+
+		if(!open_dropdown && splash_screen && dosplash && !ide.IsEditorMode()) {
 			ShowSplash();
 			Ctrl::ProcessEvents();
 		}
@@ -462,6 +377,11 @@ void AppMain___()
 		
 		if(!clset)
 			ide.LoadLastMain();
+		#ifndef flagV1
+		if (open_dropdown)
+			dropdown.Init();
+		#endif
+		StartIdeMcpThread(); // start before package selector so MCP is available immediately
 		do {
 			IdeAgain = false;
 			if(clset || ide.OpenMainPackage()) {
@@ -473,11 +393,34 @@ void AppMain___()
 					ide.TriggerIndexer();
 				}
 				StartIdeBackgroundThread();
+				StartIdeMcpThread();
 				ide.FileSelected();
 				ide.isscanning--;
 				ide.MakeTitle();
-				if(!IdeExit)
+				#ifndef flagV1
+				if (FindIndex(CommandLine(), "--playground") >= 0 ||
+					ToLower(GetExeTitle()) == "playground")
+					RunAiPlayground();
+				else if (dropdown.IsEnabled()) {
+					ide.Close();
+					do {
+						dropdown.Reset();
+						dropdown.Run();
+						if (dropdown.IsIdeToggled()) {
+							IdeAgain = true;
+							break;
+						}
+					}
+					while (!Thread::IsShutdownThreads() && dropdown.IsRunning());
+				}
+				else if(!IdeExit) {
 					ide.Run();
+					if (dropdown.IsEnabled())
+						IdeAgain = true;
+				}
+				#else
+				ide.Run();
+				#endif
 				ide.SaveConfigOnTime();
 				ide.SaveLastMain();
 				ide.Close();
@@ -505,6 +448,9 @@ void AppMain___()
 		LOG("!!!!! Unknown exception");
 	}
 #endif
+#ifndef flagV1
+	Engine::Uninstall();
+#endif
 	Ctrl::ShutdownThreads();
 
 	DeleteFolderDeep(preamble_dir);
@@ -525,3 +471,5 @@ EXITBLOCK {
 	MemoryDump();
 }
 #endif
+
+#endif // flagGUI

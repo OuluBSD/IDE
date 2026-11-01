@@ -1,0 +1,11 @@
+description "Modular Developer Environment Application Shell\377";
+
+uses
+	DevEnv/Ctrl/Lib;
+
+file
+	App.h,
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

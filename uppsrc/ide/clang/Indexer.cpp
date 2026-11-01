@@ -1,4 +1,5 @@
-#include <ide/ide.h>
+#include "clang.h"
+#include <ide/Builders/BuilderComponents.h>
 
 #define LTIMING(x)   //RTIMING(x)
 #define LTIMESTOP(x) //RTIMESTOP(x)
@@ -50,7 +51,7 @@ const VectorMap<String, Time>& FindMasterSourceCached(PPInfo& ppi, const Workspa
                                                       VectorMap<String, MasterSourceCacheRecord>& cache)
 {
 	String header_file = NormalizePath(header_file_);
-	
+
 	if(cache.GetCount() > 2000) // 2000 cached headers is enough for everybody, right?
 		cache.Clear();
 
@@ -66,13 +67,13 @@ const VectorMap<String, Time>& FindMasterSourceCached(PPInfo& ppi, const Workspa
 			VectorMap<String, Time> deps;
 			ArrayMap<String, Index<String>> dics;
 			ppi.GatherDependencies(master, deps, dics, speculative, header_file, chain, found);
-			
+
 			MasterSourceCacheRecord& m = cache.GetAdd(header_file);
 			m.chain.Clear();
 			m.master = master;
 			for(const String& f : chain)
 				m.chain.Add(f, ppi.GetFileTime(f));
-			
+
 			if(found)
 				return m.chain;
 		}
@@ -86,6 +87,8 @@ void AnnotationItem::Serialize(Stream& s)
 {
 	s % kind
 	  % pos
+	  % begin
+	  % end
 	  % definition
 	  % isvirtual
 	  % isstatic
@@ -99,14 +102,56 @@ void AnnotationItem::Serialize(Stream& s)
 	  % nest
 	  % unest
 	  % bases
+	  % parent_type
 	;
+}
+
+void StatementItem::Jsonize(JsonIO& json) {
+	json("k",kind)("a",begin)("b",end);
+}
+
+void ReferenceItem::Jsonize(JsonIO& json) {
+	json	("id", id)
+			("pos", pos)
+			("ref_pos", ref_pos)
+			("kind", kind)
+			("macro", macro)
+			;
+}
+
+void AnnotationItem::Jsonize(JsonIO& json) {
+	json	("k", kind)
+			("p", pos)
+			("b", begin)
+			("e", end)
+			("d", definition)
+			("iv", isvirtual)
+			("is", isstatic)
+			("n", name)
+			("t", type)
+			("i", id)
+			("r", pretty)
+			("s", nspace)
+			("u", uname)
+			("q", nest)
+			("w", unest)
+			("y", bases)
+			("pt", parent_type)
+			;
+}
+
+void StatementItem::Serialize(Stream& s) {
+	s % kind % begin % end;
 }
 
 void ReferenceItem::Serialize(Stream& s)
 {
 	s % id
+	  % parent_id
 	  % pos
 	  % ref_pos
+	  % kind
+	  % macro
 	;
 }
 
@@ -118,6 +163,9 @@ void FileAnnotation::Serialize(Stream& s)
 	  % time
 	  % items
 	  % refs
+	  % path
+	  % stmts
+	  % locals
 	;
 }
 
@@ -128,10 +176,11 @@ String CachedAnnotationPath(const String& source_file, const String& defines, co
 	  << defines
 	  << includes
 	  << master_file
-	  << "version 2.1"
+	  << "version 2.2"
 #ifdef _DEBUG
 	  << "debug" // to have different codebase for development
 #endif
+	  << "1" // version
 	;
 	return CacheFile(GetFileTitle(source_file) + "$" + s.FinishString() + ".code_index");
 }
@@ -156,14 +205,14 @@ void DumpIndex(const char *file, const String& what_file)
 				out << '\t' << n.pos.y << ": " << n.id << " -> " << n.pretty << ", bases: " << n.bases << "\n";
 			out << "\t=== References:\n";
 			for(const auto& n : m.value.refs)
-				out << '\t' << n.pos << "   " << n.id << " -> " << n.ref_pos << "\n";
+				out << '\t' << n.pos << "   " << n.id << " -> " << n.ref_pos << ", parent: " << n.parent_id << "\n";
 		}
 }
 
 CoEvent              Indexer::event;
 CoEvent              Indexer::scheduler;
 Mutex                Indexer::mutex;
-Vector<Indexer::Job> Indexer::jobs;
+Vector<IndexerJob>   Indexer::jobs;
 std::atomic<int>     Indexer::jobi;
 std::atomic<int>     Indexer::jobs_done;
 std::atomic<int>     Indexer::jobs_count;
@@ -176,8 +225,10 @@ bool                 Indexer::relaxed;
 
 void Indexer::BuildingPause()
 {
-	while(TheIde() && TheIde()->idestate == Ide::BUILDING)
+#ifdef flagGUI
+	while(IdeIsBuilding())
 		Sleep(200);
+#endif
 }
 
 void Indexer::IndexerThread()
@@ -189,7 +240,7 @@ void Indexer::IndexerThread()
 		int tm0 = msecs();
 		++running_indexers;
 		while(!Thread::IsShutdownThreads()) {
-			Job job;
+			IndexerJob job;
 			{
 				LTIMESTOP("Acquire job");
 				Mutex::Lock __(mutex);
@@ -198,13 +249,21 @@ void Indexer::IndexerThread()
 				else
 					break;
 			}
-			
+
 			if(Thread::IsShutdownThreads())
 				break;
 
 			BuildingPause();
 
 			int tm = msecs();
+
+			if (job.ext >= 0) {
+				Extensions()[job.ext].Get().RunJob(job);
+				PutAssist(String() << job.path << " indexed in " << msecs() - tm << " ms");
+				Mutex::Lock __(mutex);
+				jobs_done++;
+				continue;
+			}
 
 			clang.Parse(job.path, job.blitz, job.includes, job.defines,
 			            CXTranslationUnit_KeepGoing|
@@ -213,6 +272,10 @@ void Indexer::IndexerThread()
 
 			if(Thread::IsShutdownThreads())
 				break;
+
+			if(AssistDiagnostics && clang.tu) {
+				Diagnostics(clang.tu, Cout());
+			}
 
 			ClangVisitor v;
 
@@ -247,18 +310,24 @@ void Indexer::IndexerThread()
 			for(const auto& m : ~job.file_times) // in create entries even if there are no items to avoid recompiling
 				v.info.GetAdd(NormalizePath(m.key));
 
+			int i = 0;
 			for(const auto& m : ~v.info) {
 				String path = NormalizePath(m.key);
 				FileAnnotation f;
+				f.path = path;
 				f.defines = job.defines;
 				f.includes = job.includes;
-				(CppFileInfo&)f = pick(m.value);
+				static_cast<CppFileInfo&>(f) = pick(m.value);
 				f.time = job.file_times.Get(path, Time::Low());
 				f.master_file = job.master_files.Get(path, Null);
 				LLOG("Storing " << path);
 				SaveChangedFile(CachedAnnotationPath(path, f.defines, f.includes, f.master_file), StoreAsString(f), true);
 				GuiLock __;
 				CodeIndex().GetAdd(path) = pick(f);
+			#ifndef flagV1
+				if (i++ == 0 && WhenClangAstParsed)
+					WhenClangAstParsed(job.includes, path, v.ast);
+			#endif
 			}
 
 			PutAssist(String() << job.path << " indexed in " << msecs() - tm << " ms");
@@ -291,6 +360,21 @@ void Indexer::Start(const String& main, const String& includes, const String& de
 		return;
 
 	ONCELOCK {
+		String path = CacheFile("fake_build_info") + "/" + "build_info.h";
+		RealizePath(path);
+		SaveChangedFile(path,
+			"#define bmYEAR   2026\n"
+			"#define bmMONTH  7\n"
+			"#define bmDAY    6\n"
+			"#define bmHOUR   15\n"
+			"#define bmMINUTE 0\n"
+			"#define bmSECOND 0\n"
+			"#define bmTIME   Time(2026, 7, 6, 15, 0, 0)\n"
+			"#define bmMACHINE \"ASSIST\"\n"
+			"#define bmUSER    \"assist\"\n"
+			"#define bmGIT_REVCOUNT \"0\"\n"
+		);
+
 		MemoryIgnoreNonMainLeaks();
 		MemoryIgnoreNonUppThreadsLeaks(); // clangs leaks static memory in threads
 		Thread::AtShutdown([] {
@@ -318,8 +402,11 @@ void Indexer::Start(const String& main, const String& includes, const String& de
 void Indexer::SchedulerThread()
 {
 	PPInfo ppi;
+	bool first = true;
 	while(!Thread::IsShutdownThreads()) {
-		scheduler.Wait();
+		if(!first)
+			scheduler.Wait();
+		first = false;
 
 		{
 			LTIMESTOP("Scheduler");
@@ -338,6 +425,8 @@ void Indexer::SchedulerThread()
 			Index<String>             header; // included files
 
 			VectorMap<String, Vector<Tuple<String, bool>>> sources; // bool is "noblitz"
+			VectorMap<String,int> ext_files;
+
 			{
 				GuiLock __;
 
@@ -351,6 +440,7 @@ void Indexer::SchedulerThread()
 					LTIMESTOP("Load workspace");
 					Workspace wspc;
 					wspc.Scan(main);
+					Cout() << "Scheduler workspace count: " << wspc.GetCount() << "\n";
 
 					for(int pi : wspc.use_order) {
 						String pk_name = wspc[pi];
@@ -361,8 +451,14 @@ void Indexer::SchedulerThread()
 							if(!pk.file[i].separator && ppi.FileExists(path)) {
 								if(IsCSourceFile(path))
 									ps.Add({ NormalizePath(path), pk[i].noblitz });
-								else
-									workspace_headers.FindAdd(path);
+								else {
+									String ext = GetFileExt(path);
+									int ext_i = Indexer::FindExtensionByExt(ext);
+									if (ext_i >= 0)
+										ext_files.Add(path, ext_i);
+									else
+										workspace_headers.FindAdd(path);
+								}
 							}
 						}
 					}
@@ -430,6 +526,10 @@ void Indexer::SchedulerThread()
 								CodeIndex().GetAdd(path) = pick(lf);
 							}
 						}
+						#ifndef flagV1
+						if(WhenClangFileLoaded)
+							WhenClangFileLoaded(includes, path);
+						#endif
 					}
 					if(f.defines != defines || f.includes != includes || f.time != m.value) {
 						dirty_files.FindAdd(Nvl(master_file, path));
@@ -448,24 +548,35 @@ void Indexer::SchedulerThread()
 			}
 
 			{
+				auto JobAdd = [&](IndexerJob& job, const String& path) {
+					job.file_times.Add(path, files.Get(path, Time::Low()));
+					for(int q = master.Find(path); q >= 0; q = master.FindNext(q)) {
+						String hpath = header[q];
+						job.file_times.Add(hpath, files.Get(hpath, Time::Low()));
+						job.master_files.Add(header[q], path);
+					}
+					return job;
+				};
+
 				LTIMESTOP("Create indexer jobs");
 				jobs.Clear();
 				jobi = 0;
 				jobs_done = 0;
 				jobs_count = 0;
+				for (auto e : ~ext_files) {
+					bool dirty = Indexer::Extensions()[e.value].Get().IsDirty(e.key);
+					if (dirty) {
+						IndexerJob& job = jobs.Add();
+						jobs_count = jobs.GetCount();
+						job.path = e.key;
+						job.ext = e.value;
+						JobAdd(job, job.path);
+					}
+				}
 				for(const auto& pkg : ~sources) {
-					Job blitz_job;
+					IndexerJob blitz_job;
 					blitz_job.includes = includes;
 					blitz_job.defines = defines;
-					auto JobAdd = [&](Job& job, const String& path) {
-						job.file_times.Add(path, files.Get(path, Time::Low()));
-						for(int q = master.Find(path); q >= 0; q = master.FindNext(q)) {
-							String hpath = header[q];
-							job.file_times.Add(hpath, files.Get(hpath, Time::Low()));
-							job.master_files.Add(header[q], path);
-						}
-						return job;
-					};
 					int blitz_index = 0;
 					for(const auto& pf : pkg.value) {
 						FileAnnotation0 f;
@@ -479,7 +590,7 @@ void Indexer::SchedulerThread()
 								JobAdd(blitz_job, pf.a);
 							}
 							else {
-								Job& job = jobs.Add();
+								IndexerJob& job = jobs.Add();
 								jobs_count = jobs.GetCount();
 								job.includes = includes;
 								job.defines = defines;
@@ -490,7 +601,7 @@ void Indexer::SchedulerThread()
 					}
 
 					if(blitz_job.blitz.GetCount()) {
-						Job& job = jobs.Add();
+						IndexerJob& job = jobs.Add();
 						jobs_count = jobs.GetCount();
 						job = blitz_job;
 						job.path = ConfigFile(pkg.key + "$$$blitz.cpp"); // the path is fake, file does not exist

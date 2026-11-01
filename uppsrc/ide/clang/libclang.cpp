@@ -22,6 +22,10 @@ bool LoadLibClang0(const char *path)
 
 bool LoadLibClang(const String& dir)
 {
+#ifdef PLATFORM_WIN32
+	if(LoadLibClang0(AppendFileName(dir, "libclang.dll")))
+		return true;
+#endif
 #ifdef PLATFORM_MACOS
 	if(LoadLibClang0(dir + "/libclang.dylib"))
 		return true;
@@ -41,6 +45,22 @@ bool LoadLibClang(const String& dir)
 			if(LoadLibClang0(p))
 				return true;
 	}
+	return false;
+}
+
+bool LoadLibClangAutomatically()
+{
+#ifdef PLATFORM_WIN32
+	if(LoadLibClang(GetFileFolder(GetExeFilePath())))
+		return true;
+	if(LoadLibClang(GetFileFolder(GetFileFolder(GetExeFilePath()))))
+		return true;
+	if(LoadLibClang(GetFileFolder(ConfigFile("x"))))
+		return true;
+	String bin = GetEnv("UPP_BIN");
+	if(bin.GetCount() && LoadLibClang(bin))
+		return true;
+#endif
 	return false;
 }
 
@@ -191,6 +211,19 @@ CXTranslationUnit clang_parseTranslationUnit(CXIndex CIdx, const char *source_fi
                                               num_unsaved_files, options);
 }
 
+enum CXErrorCode clang_parseTranslationUnit2(
+    CXIndex CIdx, const char *source_filename,
+    const char *const *command_line_args, int num_command_line_args,
+    struct CXUnsavedFile *unsaved_files, unsigned num_unsaved_files,
+    unsigned options, CXTranslationUnit *out_TU)
+{
+	return LibClang().clang_parseTranslationUnit2(
+		CIdx, source_filename,
+		command_line_args, num_command_line_args,
+		unsaved_files, num_unsaved_files,
+		options, out_TU);
+}
+
 int clang_reparseTranslationUnit(CXTranslationUnit TU, unsigned int num_unsaved_files, CXUnsavedFile *unsaved_files, unsigned int options)
 {
 	return LibClang().clang_reparseTranslationUnit(TU, num_unsaved_files, unsaved_files, options);
@@ -298,6 +331,31 @@ unsigned clang_getNumOverloadedDecls(CXCursor cursor)
 CXCursor clang_getOverloadedDecl(CXCursor cursor, unsigned index)
 {
 	return LibClang().clang_getOverloadedDecl(cursor, index);
+}
+
+unsigned clang_hashCursor(CXCursor cursor)
+{
+	return LibClang().clang_hashCursor(cursor);
+}
+
+CXSourceRange clang_getCursorExtent(CXCursor cursor)
+{
+	return LibClang().clang_getCursorExtent(cursor);
+}
+
+CXSourceLocation clang_getRangeStart(CXSourceRange range)
+{
+	return LibClang().clang_getRangeStart(range);
+}
+
+CXSourceLocation clang_getRangeEnd(CXSourceRange range)
+{
+	return LibClang().clang_getRangeEnd(range);
+}
+
+CXString clang_getClangVersion(void)
+{
+	return LibClang().clang_getClangVersion();
 }
 
 #endif

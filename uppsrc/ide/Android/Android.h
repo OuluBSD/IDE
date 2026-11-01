@@ -43,18 +43,24 @@ public:
 	
 	bool Validate() const;
 	bool ValidatePlatform() const;
+	bool ValidatePlatform(const String& platformVersion) const;
 	bool ValidateBuildTools() const;
+	bool ValidateBuildToolsRelease(const String& release) const;
 	
 	Vector<String> FindPlatforms() const;
 	Vector<String> FindBuildToolsReleases() const;
 	String         FindDefaultPlatform() const;
 	String         FindDefaultBuildToolsRelease() const;
+
+	Vector<String> FindNdks() const;
+	String         FindDefaultNdk() const;
 	
 	Vector<AndroidDevice>        FindDevices() const;
 	Vector<AndroidVirtualDevice> FindVirtualDevices() const;
 	
 public:
 	Adb MakeAdb() const { return Adb(AdbPath()); }
+	bool HasAdb() const;
 	
 public:
 	String BinDir() const;
@@ -64,16 +70,18 @@ public:
 	String ConcretePlatformDir() const;
 	String PlatformToolsDir() const;
 	String ToolsDir() const;
+	String NdkDir() const;
 	
 	bool HasD8() const;
 	
-	String AaptPath() const       { return ConcreteBuildToolsDir() + DIR_SEPS + "aapt" + GetExeExt(); }
+	String AaptPath() const;
+	String Aapt2Path() const      { return ConcreteBuildToolsDir() + DIR_SEPS + "aapt2" + GetExeExt(); }
 	String ApksignerPath() const  { return ConcreteBuildToolsDir() + DIR_SEPS + "apksigner" + Android::GetScriptExt(); }
 	String DxPath() const         { return ConcreteBuildToolsDir() + DIR_SEPS + "dx" + Android::GetScriptExt(); }
 	String D8Path() const         { return ConcreteBuildToolsDir() + DIR_SEPS + "d8" + Android::GetScriptExt(); }
 	String ZipalignPath() const   { return ConcreteBuildToolsDir() + DIR_SEPS + "zipalign" + GetExeExt(); }
 	String AndroidJarPath() const { return ConcretePlatformDir() + DIR_SEPS + "android.jar"; }
-	String AdbPath() const        { return PlatformToolsDir() + DIR_SEPS + "adb" + GetExeExt(); }
+	String AdbPath() const;
 	String AndroidPath() const    { return ToolsDir() + DIR_SEPS + "android" + Android::GetScriptExt(); }
 	String EmulatorPath() const   { return ToolsDir() + DIR_SEPS + "emulator" + GetExeExt(); }
 	
@@ -95,6 +103,7 @@ private:
 class AndroidNDK {
 public:
 	static String GetDownloadUrl();
+	static String ResolveNdkPath(const String& path);
 	
 public:
 	AndroidNDK();
@@ -102,6 +111,8 @@ public:
 	virtual ~AndroidNDK();
 	
 	bool Validate() const;
+	bool ValidateDirect() const;
+	bool ValidateHostToolchain() const;
 	
 	String FindDefaultPlatform() const;
 	String FindDefaultToolchain() const;

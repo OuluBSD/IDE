@@ -1,0 +1,7 @@
+description "Workspace State & Presenters Bridging Core to Ctrl\377";
+
+uses
+	DevEnv/Ctrl;
+
+file
+	Core.h;

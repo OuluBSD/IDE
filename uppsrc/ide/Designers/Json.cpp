@@ -1,3 +1,4 @@
+#ifdef flagGUI
 #include "Designers.h"
 
 void CopyJsonPath(TreeCtrl& tree)
@@ -122,7 +123,7 @@ struct JsonDesModule : public IdeModule {
 	virtual String       GetID() { return "JsonDesModule"; }
 
 	virtual bool         AcceptsFile(const char *path) {
-		return ToLower(GetFileExt(path)) == ".json";
+		return ToLower(GetFileExt(path)) == ".json" && GetFileName(path) != "AI.json";
 	}
 
 	virtual IdeDesigner *CreateDesigner(const char *path, byte) {
@@ -140,3 +141,4 @@ INITIALIZER(JsonViewDes)
 {
 	RegisterIdeModule(Single<JsonDesModule>());
 }
+#endif // flagGUI

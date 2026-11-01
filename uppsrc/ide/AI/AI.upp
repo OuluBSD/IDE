@@ -1,0 +1,16 @@
+description "\377B";
+
+uses
+	ide/Designers,
+	ide/Vfs,
+	AI,
+	ide/AI/Ctrl;
+
+file
+	AGENTS.md,
+	AI.h,
+	Designer.h,
+	IdeAIDes.cpp,
+	DesT.cpp,
+	AICore.cpp;
+

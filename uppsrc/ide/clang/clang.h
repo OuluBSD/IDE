@@ -1,7 +1,10 @@
 #ifndef _clang_clang_h
 #define _clang_clang_h
 
+
 #include <ide/Common/Common.h>
+
+#include <Core/Core.h>
 
 #define UBUNTU2204_WORKAROUND // there appears to be a bug in Ubuntu 22.04.1LTS libclang 14
 
@@ -15,15 +18,21 @@ extern int  IndexerThreads;
 extern int  ParsedFiles;
 extern int  LibClangCppVersion;
 
+// When non-empty, Clang::Parse uses this ";"-separated -isystem list instead of
+// calling GetClangInternalIncludes() (which caches one toolchain's paths, discovered
+// relative to the running exe - wrong for a tool like uppsrc/Indexer that must match
+// whichever build method's toolchain the caller selected, since different methods use
+// mutually incompatible compiler/runtime combinations). Leave empty to keep the
+// default GetClangInternalIncludes() behavior (TheIDE, umk's normal -A/--index-db use).
+extern String ClangIsystemOverride;
+
 void ClangConfigSerialize(Stream& s);
 void ClangConfigSetDefaults();
 
 void PutAssist(const char *s);
 
 #ifndef flagLCLANG
-	#ifdef PLATFORM_POSIX
-	#define DYNAMIC_LIBCLANG // dynamic loading of clang experiment (does not seem to work in Win32)
-	#endif
+	#define DYNAMIC_LIBCLANG // dynamic loading of clang experiment
 #endif
 
 #ifdef DYNAMIC_LIBCLANG
@@ -50,6 +59,14 @@ inline bool HasLibClang()
 
 #endif
 
+#ifndef flagGUI
+NAMESPACE_UPP
+struct GuiLock {
+	GuiLock() {}
+};
+END_UPP_NAMESPACE
+#endif
+
 using namespace Upp;
 
 class CoEvent {
@@ -66,16 +83,17 @@ String FetchString(CXString cs);
 String GetCursorKindName(CXCursorKind cursorKind);
 String GetCursorSpelling(CXCursor cursor);
 String GetTypeSpelling(CXCursor cursor);
+String GetTypeDeclarationSpelling(CXCursor cursor);
 
 struct SourceLocation : Moveable<SourceLocation> {
 	String path;
-	Point  pos;
-	
+	Point  pos, begin, end;
+
 	bool operator==(const SourceLocation& b) const { return path == b.path && pos == b.pos; }
 	bool operator!=(const SourceLocation& b) const { return !operator==(b); }
-	void Serialize(Stream& s)                      { s % path % pos; }
+	void Serialize(Stream& s)                      { s % path % pos % begin % end; }
 	hash_t GetHashValue() const                    { return CombineHash(path, pos); }
-	String ToString() const                        { return path + ": " + AsString(pos); }
+	String ToString() const                        { return path + ": " + AsString(pos) + " (" + AsString(begin) + "-" + AsString(end) + ")"; }
 };
 
 String GetClangInternalIncludes();
@@ -93,7 +111,9 @@ enum AdditionalKinds {
 };
 
 Image  CxxIcon(int kind);
+#ifdef flagGUI
 int    PaintCpp(Draw& w, const Rect& r, int kind, const String& name, const String& pretty, Color ink, bool focuscursor, bool retval_last = false);
+#endif
 String SignatureQtf(const String& name, const String& pretty, const String& nest, int pari = INT_MAX);
 String CppText(const String& name, const String& pretty);
 
@@ -102,8 +122,13 @@ bool IsTypedef(int kind);
 bool IsTemplate(int kind);
 bool IsFunction(int kind);
 bool IsMethod(int kind);
+bool IsDecl(int kind);
+bool IsTypeDecl(int kind);
+bool IsTypeRef(int kind);
+bool IsErrorKind(int kind);
 bool IsVariable(int kind);
-int  FindId(const String& s, const String& id);
+int  FindFirstId(const String& s, const String& id);
+int  FindLastId(const String& s, const String& id);
 
 struct AutoCompleteItem : Moveable<AutoCompleteItem> {
 	String parent;
@@ -124,13 +149,24 @@ struct AnnotationItem : Moveable<AnnotationItem> {
 	String nest; // Upp::Class
 	String unest; // UPP::CLASS
 	String bases; // base classes of struct/class
+	String parent_id;
+	String parent_type; // Added to fix compilation error
 	Point  pos = Null;
+	Point  begin = Null;
+	Point  end = Null;
 	int    kind = Null;
 	bool   definition = false;
 	bool   isvirtual = false;
 	bool   isstatic = false;
-	
+
 	void Serialize(Stream& s);
+	void Jsonize(JsonIO& json);
+	void operator=(const AnnotationItem& b);
+	bool operator==(const AnnotationItem& b) const;
+	bool IsSameContent(const AnnotationItem& b) const;
+	bool IsLineAreaPartialMatch(const AnnotationItem& b) const;
+	String ToString() const;
+	bool operator()(const AnnotationItem& a, const AnnotationItem& b) const {return a.pos.y != b.pos.y ? a.pos.y < b.pos.y : a.pos.x < b.pos.x;}
 };
 
 String GetClass(const AnnotationItem& m);
@@ -140,13 +176,29 @@ String MakeDefinition(const AnnotationItem& m);
 
 struct ReferenceItem : Moveable<ReferenceItem> {
 	String id;
+	String parent_id; // function or struct that contains this item
+	int    kind; // Added to fix compilation error
 	Point  pos;
 	Point  ref_pos;
-	
-	bool operator==(const ReferenceItem& b) const { return id == b.id && pos == b.pos; }
-	hash_t GetHashValue() const                   { return CombineHash(id, pos); }
-	
+	bool   macro = false;
+
+	bool operator==(const ReferenceItem& b) const { return id == b.id && pos == b.pos && macro == b.macro; }
+	hash_t GetHashValue() const                   { return CombineHash(id, pos, macro); }	String ToString() const;
+	String MakeLocalString(const String& filepath) const;
+	String MakeTargetString(const String& filepath) const;
 	void Serialize(Stream& s);
+	void Jsonize(JsonIO& json);
+};
+
+struct StatementItem : Moveable<StatementItem> {
+	int		kind = Null;
+	Point	begin;
+	Point	end;
+
+	bool operator==(const StatementItem& b) const { return begin == b.begin && end == b.end; }
+	hash_t GetHashValue() const                   { return CombineHash(kind, begin, end); }
+	void Serialize(Stream& s);
+	void Jsonize(JsonIO& json);
 };
 
 struct CurrentFileContext {
@@ -163,6 +215,8 @@ struct CppFileInfo : Moveable<CppFileInfo> {
 	Vector<AnnotationItem> items;
 	Vector<AnnotationItem> locals;
 	Vector<ReferenceItem>  refs;
+	Vector<StatementItem>  stmts;
+	String ToString() const;
 };
 
 enum { PARSE_FILE = 0x80000000 };
@@ -179,7 +233,7 @@ struct Clang {
 	           const String& filename2 = Null, const String& content2 = Null);
 	bool ReParse(const String& filename, const String& content,
 	             const String& filename2 = Null, const String& content2 = Null);
-	
+
 	Clang();
 	~Clang();
 };
@@ -194,10 +248,31 @@ bool   IsCppSourceFile(const String& path);
 bool   IsSourceFile(const String& path);
 bool   IsHeaderFile(const String& path);
 
+struct ClangNode {
+	Array<ClangNode> sub;
+	int kind = -1;
+	String id, type;
+	Point begin = Null;
+	Point end = Null;
+	hash_t filepos_hash = 0;
+	hash_t type_hash = 0;
+	bool is_ref = false;
+	bool is_definition = false;
+	bool is_type_builtin = false;
+
+	void Clear() {sub.Clear(); kind = -1; id.Clear(); type.Clear(); begin = Null; end = Null; filepos_hash = 0; is_ref = false; is_definition = false; type_hash = 0; is_type_builtin = false;}
+	String GetTreeString(int depth=0) const;
+	hash_t GetCommonHash() const;
+	bool TranslateTypeHash(const VectorMap<hash_t,hash_t>& translation);
+};
+
+extern void (*WhenClangAstParsed)(String& includes, const String& path, ClangNode& ast);
+extern void (*WhenClangFileLoaded)(const String& includes, const String& path);
+
 class ClangVisitor {
 	bool initialized = false;
 	CXPrintingPolicy pp_id, pp_pretty;
-	
+
 	bool           ProcessNode(CXCursor c);
 
 	friend CXChildVisitResult clang_visitor(CXCursor cursor, CXCursor p, CXClientData clientData);
@@ -205,11 +280,11 @@ class ClangVisitor {
 	VectorMap<CXFile, String>                 cxfile; // accelerate CXFile (CXFile has to be valid across tree as there is no Dispose)
 	VectorMap<CXFile, bool>                   do_file; // accelerate WhenFile
 	VectorMap<String, Index<ReferenceItem>>   ref_done; // avoid self-references, multiple references
-	
+
 	struct MCXCursor : Moveable<MCXCursor> {
 		CXCursor cursor;
 	};
-	
+
 	ArrayMap<SourceLocation, MCXCursor>  tfn; // to convert e.g. Index<String>::Find(String) to Index::Find(T)
 
 	struct CXLocation {
@@ -217,14 +292,23 @@ class ClangVisitor {
 		CXFile file;
 	};
 
+	struct CXRange {
+		CXLocation p0, p1;
+	};
+
 	CXLocation      GetLocation(CXSourceLocation cxlocation);
 	SourceLocation  GetSourceLocation(const CXLocation& p);
+	SourceLocation  GetSourceLocation(const CXLocation& p, const CXRange& r); // Added to fix compilation error
+	CXRange         GetRange(CXSourceRange cxrange); // Added to fix compilation error
 	
-	bool locals = false;
+	bool   locals = false;
+	String parent_id;
 
 public:
 	VectorMap<String, CppFileInfo> info;
-	
+	ClangNode ast;
+	Vector<ClangNode*> scope;
+
 	Gate<const String&> WhenFile;
 
 	void Do(CXTranslationUnit tu);
@@ -254,7 +338,7 @@ String FindMasterSource(PPInfo& ppi, const Workspace& wspc, const String& header
 struct MasterSourceCacheRecord : Moveable<MasterSourceCacheRecord> {
 	String master;
 	VectorMap<String, Time> chain;
-	
+
 	bool CheckTimes(PPInfo& ppi) const;
 	void Serialize(Stream& s);
 };
@@ -270,24 +354,33 @@ struct FileAnnotation0 {
 };
 
 struct FileAnnotation : FileAnnotation0, CppFileInfo {
+	String path;
 	void Serialize(Stream& s);
 };
 
 ArrayMap<String, FileAnnotation>& CodeIndex();
 
+struct IndexerJob : Moveable<IndexerJob> {
+	String                                  path;
+	String                                  blitz;
+	String                                  includes;
+	String                                  defines;
+	WithDeepCopy<VectorMap<String, Time>>   file_times;
+	WithDeepCopy<VectorMap<String, String>> master_files;
+	int                                     ext = -1;
+};
+
+struct IndexerExtension {
+	virtual ~IndexerExtension() {}
+	virtual void RunJob(IndexerJob& job) = 0;
+	virtual bool RunCurrentFile() = 0;
+	virtual bool IsDirty(const String& s) = 0;
+};
+
 class Indexer {
-	struct Job : Moveable<Job> {
-		String                                  path;
-		String                                  blitz;
-		String                                  includes;
-		String                                  defines;
-		WithDeepCopy<VectorMap<String, Time>>   file_times;
-		WithDeepCopy<VectorMap<String, String>> master_files;
-	};
-	
 	static CoEvent            event, scheduler;
 	static Mutex              mutex;
-	static Vector<Job>        jobs;
+	static Vector<IndexerJob> jobs;
 	static std::atomic<int>   jobi;
 	static std::atomic<int>   jobs_done;
 	static std::atomic<int>   jobs_count; // way to get jobs.GetCount without mutex
@@ -295,7 +388,7 @@ class Indexer {
 	static bool               running_scheduler;
 	static String             main, includes, defines;
 	static bool               relaxed;
-	
+
 	static void IndexerThread();
 	static void SchedulerThread();
 	static void BuildingPause();
@@ -306,10 +399,43 @@ public:
 	static int    GetJobsCount()       { return jobs_count; }
 	static bool   IsSchedulerRunning() { return running_scheduler; }
 	static double Progress();
+
+public:
+	typedef IndexerExtension* (*NewExt)();
+	typedef bool (*AcceptExt)(String);
+	template <class T> static IndexerExtension* New() {return new T;}
+	template <class T> static bool Accept(String ext) {return T::AcceptExt(ext);}
+	struct Extension {
+		String name;
+		NewExt new_fn = 0;
+		AcceptExt accept_fn = 0;
+		One<IndexerExtension> obj;
+		IndexerExtension& Get() {if (obj.IsEmpty()) obj = new_fn(); return *obj;}
+	};
+	static Array<Extension>& Extensions() {return Single<Array<Extension>>();}
+	template <class T> static void RegisterExtension(String name) {
+		auto& e = Extensions().Add();
+		e.name = name;
+		e.new_fn = &New<T>;
+		e.accept_fn = &Accept<T>;
+	}
+	static int FindExtensionByExt(String ext) {
+		for(int i = 0; i < Extensions().GetCount(); i++)
+			if (Extensions()[i].accept_fn(ext))
+				return i;
+		return -1;
+	}
+	
+	static const Vector<IndexerJob>& Jobs() {return jobs;}
+	
 };
+
+#define INITIALIZER_INDEXER_EXTENSION(x) INITIALIZER(x) {Indexer::RegisterExtension<x>(#x);}
 
 void DumpIndex(const char *file, const String& what = Null);
 
 void CurrentFileDeleteCache();
+
+bool IsPreprocessingCursor(CXCursor);
 
 #endif

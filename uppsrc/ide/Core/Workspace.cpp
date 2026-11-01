@@ -10,6 +10,11 @@ String PackageDirectory(const String& name)
 	return MainNest().PackageDirectory(name);
 }
 
+String GetPackagePathNest(const String& path)
+{
+	return GetPathNest(path);
+}
+
 String GetPathNest(const String& path)
 {
 	if(IsExternalMode())
@@ -19,6 +24,18 @@ String GetPathNest(const String& path)
 		if(h.StartsWith(UnixPath(NormalizePath(dir)) + '/'))
 			return dir;
 	return Null;
+}
+
+String GetPackageNestRelativePath(const String& path)
+{
+	String assembly_dir = GetPackagePathNest(path);
+	if (!assembly_dir.IsEmpty() && path.Find(assembly_dir) == 0) {
+		String rel_pkg_dir = path.Mid(assembly_dir.GetCount());
+		if (rel_pkg_dir.GetCount() && rel_pkg_dir[0] == DIR_SEP)
+			rel_pkg_dir = rel_pkg_dir.Mid(1);
+		return rel_pkg_dir;
+	}
+	return path;
 }
 
 String SourcePath(const String& package, const String& file) {
@@ -39,7 +56,9 @@ bool IsDirectoryPackage(const String& path)
 {
 	if(IsExternalMode())
 		return DirectoryExists(path);
-	return FileExists(AppendFileName(path, GetFileTitle(path) + ".upp"));
+	String title = GetFileTitle(path);
+	return FileExists(AppendFileName(path, title + ".upp")) ||
+	       FileExists(AppendFileName(path, title + ".xupp"));
 }
 
 String EncodePathAsFileName(const String& path)
@@ -65,7 +84,13 @@ String PackageFile(const String& package)
 		RealizePath(p);
 		return p;
 	}
-	return AppendFileName(PackageDirectory(package), GetFileTitle(package) + ".upp");
+	String dir = PackageDirectory(package);
+	String title = GetFileTitle(package);
+	String p = AppendFileName(dir, title + ".upp");
+	if(FileExists(p))
+		return p;
+	String px = AppendFileName(dir, title + ".xupp");
+	return FileExists(px) ? px : p;
 }
 
 bool IsNestReadOnly(const String& path)
@@ -140,10 +165,16 @@ Vector<String> Combine(const Vector<String>& conf, const char *flags) {
 	return cfg;
 }
 
+// A lone '-' or empty option text is never a valid compiler flag ('-' means
+// stdin and breaks '-c ... -o' command lines); skip it (e.g. 'options(GCC|CLANG) -;').
+bool IsBogusOptionText(const String& text) {
+	return text.IsEmpty() || text == "-";
+}
+
 String Gather(const Array<OptItem>& set, const Vector<String>& conf, bool nospace) {
 	String s;
 	for(int i = 0; i < set.GetCount(); i++)
-		if(MatchWhen(set[i].when, conf)) {
+		if(MatchWhen(set[i].when, conf) && !IsBogusOptionText(set[i].text)) {
 			if(!nospace && !s.IsEmpty()) s.Cat(' ');
 			s.Cat(set[i].text);
 		}
@@ -153,7 +184,7 @@ String Gather(const Array<OptItem>& set, const Vector<String>& conf, bool nospac
 Vector<String> GatherV(const Array<OptItem>& set, const Vector<String>& conf) {
 	Vector<String> s;
 	for(int i = 0; i < set.GetCount(); i++)
-		if(MatchWhen(set[i].when, conf))
+		if(MatchWhen(set[i].when, conf) && !IsBogusOptionText(set[i].text))
 			s << set[i].text;
 	return s;
 }

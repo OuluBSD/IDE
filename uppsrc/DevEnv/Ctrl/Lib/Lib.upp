@@ -1,0 +1,7 @@
+description "Visual Package Explorer & UppHub UI for DevEnv\377";
+
+uses
+	DevEnv/Ctrl/Core;
+
+file
+	Lib.h;

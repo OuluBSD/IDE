@@ -2,14 +2,17 @@ description "TheIDE - debuggers\377B";
 
 uses
 	ide/Common,
-	HexView,
-	ide/Core;
+	ide/Core,
+	ide/DebuggersCore;
+
+uses(GUI) HexView;
 
 uses(!POSIX) plugin/ndisasm;
 
 library(WIN32 (GCC | CLANG)) "dbghelp psapi";
 
 file
+	AGENTS.md,
 	Debuggers.h options(BUILDER_OPTION) PCH,
 	Debuggers.iml,
 	Gdb.lay,
@@ -22,6 +25,12 @@ file
 	Gdb.cpp,
 	GdbMem.cpp,
 	GdbUtils.cpp,
+	LLDB readonly separator,
+	LLDB.h,
+	LLDBCmd.cpp,
+	LLDBData.cpp,
+	LLDB.cpp,
+	LLDBMem.cpp,
 	PDB readonly separator,
 	Pdb.h,
 	cvconst.h,

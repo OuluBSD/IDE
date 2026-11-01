@@ -6,6 +6,7 @@ uses
 	ide/Common;
 
 file
+	AGENTS.md,
 	Designers.h,
 	Png.cpp,
 	Img.cpp,
@@ -14,5 +15,7 @@ file
 	TreeDes.cpp,
 	Xml.cpp,
 	Json.cpp,
-	md.cpp;
+	md.cpp,
+	export_md.cpp,
+	Designers.lay;
 

@@ -36,6 +36,10 @@ public:
 class Jdk {
 public:
 	static String GetDownloadUrl();
+	// JDK_PATH in build methods may point either at the JDK root or directly at
+	// its "bin" subdirectory. Normalize to the JDK root so GetBinDir() and
+	// JAVA_HOME stay consistent regardless of which form was configured.
+	static String NormalizePath(const String& path);
 	
 public:
 	Jdk(const String& path, Host* host);
@@ -62,7 +66,7 @@ public:
 	String GetPath() const                 { return this->path; }
 
 public:
-	void SetPath(const String& path) { this->path = path; }
+	void SetPath(const String& path) { this->path = NormalizePath(path); }
 	void SetVersion(const String& version);
 	
 private:

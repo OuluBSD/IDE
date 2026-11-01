@@ -189,4 +189,16 @@ struct JsonViewDes : TreeViewDes {
 
 INITIALIZE(JsonViewDes)
 
+struct IdeEditPos : Moveable<IdeEditPos> {
+	Time filetime = Null;
+	LineEdit::EditPos editpos;
+	LineEdit::UndoData undodata;
+};
+
+static VectorMap<String, IdeEditPos>& sEPai()
+{
+	static VectorMap<String, IdeEditPos> x;
+	return x;
+}
+
 #endif

@@ -3,6 +3,27 @@
 #define LLOG(x)
 #define LTIMESTOP(x) TIMESTOP(x)
 
+
+NAMESPACE_UPP
+
+extern String (*GetCursorKindNamePtr)(int);
+
+END_UPP_NAMESPACE
+
+String GetCursorKindNameInt(int cursorKind)
+{
+	if(cursorKind >= 0 && cursorKind <= CXCursor_OverloadCandidate) {
+		if(!HasLibClang())
+			return Null;
+		return FetchString(clang_getCursorKindSpelling((CXCursorKind)cursorKind));
+	}
+	else return "Kind(" + IntStr(cursorKind) + ")";
+}
+
+INITBLOCK {
+	::Upp::GetCursorKindNamePtr = &GetCursorKindNameInt;
+}
+
 String FetchString(CXString cs)
 {
 	if(!HasLibClang())
@@ -33,6 +54,13 @@ String GetTypeSpelling(CXCursor cursor)
 	return FetchString(clang_getTypeSpelling(clang_getCursorType(cursor)));
 }
 
+String GetTypeDeclarationSpelling(CXCursor cursor)
+{
+	if(!HasLibClang())
+		return Null;
+	return FetchString(clang_getTypeSpelling(clang_getCursorType(clang_getTypeDeclaration(clang_getCursorType(cursor)))));
+}
+
 String GetClangInternalIncludes()
 {
 	INTERLOCKED {
@@ -61,6 +89,9 @@ String GetClangInternalIncludes()
 				if(DirectoryExists(dir))
 					MergeWith(includes, ";", NormalizePath(dir));
 			}
+		}
+		if(AssistDiagnostics) {
+			Cout() << "Clang internal includes: " << includes << "\n";
 		}
 		return includes;
 	}
@@ -101,13 +132,24 @@ bool Clang::Parse(const String& filename_, const String& content,
 		SaveChangedFile(filename, src);
 	}
 	
-	String includes = includes_;
-	MergeWith(includes, ";", GetClangInternalIncludes());
-	
 	Vector<String> args;
 
+	// Compiler-internal system headers (libc++, clang's own resource-dir builtins)
+	// get -isystem instead of -I, both to take precedence over caller-supplied
+	// include dirs (matching what the real clang++ driver does internally via
+	// -internal-isystem) and to avoid header-order conflicts: e.g. on a MinGW-target
+	// libc++ toolchain, libc++'s <cmath>/__math/traits.h must see its own <stdio.h>/
+	// math macros ahead of the plain -I search or it collides with mingw's math.h
+	// macro-based signbit()/etc and fails to parse.
+	String isystem_includes = ClangIsystemOverride.GetCount()
+	                           ? ClangIsystemOverride : GetClangInternalIncludes();
+	for(const String& s : Split(isystem_includes, ';')) {
+		args.Add("-isystem");
+		args.Add(s);
+	}
+
 	INTERLOCKED // as there is just single static 'use'
-		for(const String& s : Split(includes, ';')) {
+		for(const String& s : Split(includes_, ';')) {
 		#ifdef PLATFORM_WIN32 // we need to ignore internal VC++ headers
 			static VectorMap<String, bool> use;
 			int q = use.Find(s);
@@ -156,6 +198,13 @@ bool Clang::Parse(const String& filename_, const String& content,
 		{ ~filename, ~content, (unsigned)content.GetCount() },
 		{ ~filename2, ~content2, (unsigned)content2.GetCount() },
 	};
+	
+	LOG(filename);
+	LOG(filename2);
+	LOG(cmdline);
+	if(AssistDiagnostics) {
+		Cout() << "Clang commandline: " << cmdline << "\n";
+	}
 	tu = clang_parseTranslationUnit(index, nullptr, argv, argv.GetCount(),
 	                                options & PARSE_FILE ? nullptr : ufile,
 	                                options & PARSE_FILE ? 0 : (filename2.GetCount() ? 2 : 1),
@@ -257,6 +306,7 @@ void Diagnostics(CXTranslationUnit tu, Stream& out)
 #ifdef PLATFORM_WIN32
 String GetLibClangVersion()
 {
-	return FetchString(clang_getClangVersion());
+	// clang_getClangVersion was removed in newer libclang versions
+	return "libclang";
 }
 #endif

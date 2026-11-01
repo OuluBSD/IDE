@@ -4,7 +4,6 @@ noblitz;
 
 uses
 	ide\Core,
-	ide/Android,
 	ide/Java,
 	ide/Android;
 
@@ -13,17 +12,31 @@ uses(!NOSO) plugin/png;
 uses(!NOSO) Draw;
 
 file
-	Builders.h options(BUILDER_OPTION) PCH,
+	AGENTS.md,
+	Builders.h,
 	CppBuilder.cpp,
 	MakeFile.cpp,
 	CCJ.cpp,
 	coff.h,
 	Builders readonly separator,
+	VfsBuilder.cpp,
 	GccBuilder.cpp,
 	MscBuilder.cpp,
 	JavaBuilder.cpp,
+	DotnetBuilder.cpp,
 	ScriptBuilder.cpp,
 	Cocoa.cpp,
+	UWP readonly separator,
+	UwpBuilder.cpp,
+	UwpTemplates.brc,
+//	dummy_uwp.cpp,
+	UwpProjectGen.h,
+	UwpTemplates/UwpSolution.sln.tpl,
+	UwpTemplates/UwpProject.vcxproj.tpl,
+	UwpTemplates/UwpProject.vcxproj.filters.tpl,
+	UwpTemplates/UwpPackage.appxmanifest.tpl,
+	UwpTemplates/DotnetProject.csproj.tpl,
+	UwpTemplates/UwpCSharp.csproj.tpl,
 	Android readonly separator,
 	Android.h,
 	AndroidProject.cpp,

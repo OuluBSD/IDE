@@ -7,6 +7,7 @@
 #include "Android.h"
 #include "BuilderComponents.h"
 #include "Build.h"
+#include "UwpProjectGen.h"
 
 void PutCompileTime(int time, int count);
 
@@ -20,7 +21,7 @@ struct CppBuilder : Builder {
 	virtual String GetTargetExt() const;
 	virtual void   CleanPackage(const String& package, const String& outdir);
 
-	const Workspace& wspc;
+	const Workspace *wspc;
 	Time             targettime;
 	Vector<String>   CFLAGS;
 	Vector<String>   CXXFLAGS;
@@ -66,10 +67,30 @@ struct CppBuilder : Builder {
 	virtual void AddCCJ(MakeFile& mfinfo, String package,
 		const Index<String>& common_config, bool exporting, bool last_ws);
 
-	CppBuilder() : wspc(GetIdeWorkspace()) {}
+	CppBuilder() : wspc(&GetIdeWorkspace()) {}
 };
 
 String SourceToObjName(const String& package, const String& srcfile_);
+
+struct VfsBuilder : CppBuilder {
+	virtual void   AddFlags(Index<String>& cfg);
+	virtual bool   BuildPackage(const String& package, Vector<String>& linkfile, Vector<String>& immfile,
+	    String& linkoptions, const Vector<String>& all_uses, const Vector<String>& all_libraries, int optimize);
+	virtual bool   Link(const Vector<String>& linkfile, const String& linkoptions, bool createmap);
+	virtual bool   Preprocess(const String& package, const String& file, const String& target, bool asmout);
+	virtual String CompilerName() const;
+	virtual bool IsInternalCompiler() const;
+	
+	bool   RunFile(String cmdline, int slot, String file, String key, int blitz_count);
+	bool   RunFile(String cmdline, Stream& out, int slot, String file, String key, int blitz_count);
+	String CmdLine(const String& package, const Package& pkg);
+	void   CToAST(String fo, String objfile, const String& package, const Package& pkg);
+	void   RunPkgConfig(Vector<String>& v);
+	
+	String includes;
+	VectorMap<String,String> pkgconfig_cache;
+	Vector<String> internal;
+};
 
 struct GccBuilder : CppBuilder {
 	virtual void   AddFlags(Index<String>& cfg);
@@ -98,7 +119,7 @@ struct MscBuilder : CppBuilder {
 	virtual bool   Link(const Vector<String>& linkfile, const String& linkoptions, bool createmap);
 	virtual bool   Preprocess(const String& package, const String& file, const String& target, bool asmout);
 
-	String CmdLine(const String& package, const Package& pkg);
+	virtual String CmdLine(const String& package, const Package& pkg, bool is_c = false);
 	String MachineName() const;
 	String LinkerName() const;
 	String Pdb(String package, int slot, bool separate_pdb) const;
@@ -125,6 +146,41 @@ struct JavaBuilder : CppBuilder {
 
 	String         JavaLine();
 	String         JarLine();
+};
+
+struct UwpBuilder : MscBuilder {
+	virtual void   AddFlags(Index<String>& cfg);
+	virtual bool   BuildPackage(const String& package, Vector<String>& linkfile, Vector<String>& immfile,
+		String& linkoptions, const Vector<String>& all_uses, const Vector<String>& all_libraries, int optimize);
+	virtual bool   Link(const Vector<String>& linkfile, const String& linkoptions, bool createmap);
+
+	String         GetMsBuildPath() const;
+
+	struct UwpProjectData : Moveable<UwpProjectData> {
+		Index<String> clcompile;
+		Index<String> clincludes;
+		Index<String> none;
+		Index<String> content;
+		String        root;
+	};
+
+	UwpProjectData& GetProjectData(const String& package);
+
+	static Index<String>  project_files;
+	static bool           uwp_started;
+	static VectorMap<String, UwpProjectData> project_map;
+	bool                  main_uses_gui = false;
+};
+
+struct DotnetBuilder : CppBuilder {
+	virtual void   AddFlags(Index<String>& cfg);
+	virtual bool   BuildPackage(const String& package, Vector<String>& linkfile, Vector<String>& immfile,
+		String& linkoptions, const Vector<String>& all_uses, const Vector<String>& all_libraries, int optimize);
+	virtual bool   Link(const Vector<String>& linkfile, const String& linkoptions, bool createmap);
+	virtual String GetTargetExt() const;
+
+	Index<String>  project_files;
+	bool           dotnet_started = false;
 };
 
 struct ScriptBuilder : CppBuilder {
@@ -168,7 +224,15 @@ String GetDefaultUppOut();
 INITIALIZE(GccBuilder)
 INITIALIZE(MscBuilder)
 INITIALIZE(JavaBuilder)
+INITIALIZE(UwpBuilder)
+INITIALIZE(DotnetBuilder)
 INITIALIZE(AndroidBuilder)
 INITIALIZE(ScriptBuilder)
+
+#ifndef flagV1
+ #ifdef flagGUI
+  INITIALIZE(VfsBuilder)
+ #endif
+#endif
 
 #endif

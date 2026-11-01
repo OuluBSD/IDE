@@ -1,3 +1,4 @@
+#ifdef flagGUI
 #include "Browser.h"
 
 #define IMAGEFILE <ide/Browser/Topic.iml>
@@ -95,23 +96,7 @@ void TopicEditor::SerializeEditPos(Stream& s)
 				break;
 			s % editstate.GetAdd(fn).pos;
 		}
-	s % grouptopic;
-	s % lastlang;
 	s % lasttemplate;
-}
-
-void TopicEditor::ExportPdf()
-{
-	FileSel fs;
-	fs.Type("PDF files", "*.pdf")
-	  .AllFilesType()
-	  .DefaultExt("pdf");
-	if(!fs.ExecuteSaveAs("Output PDF file"))
-		return;
-	Size page = Size(3968, 6074);
-	PdfDraw pdf(page + 400);
-	::Print(pdf, editor.Get(), page);
-	SaveFile(~fs, pdf.Finish());
 }
 
 static void UpdateTopicLinks(String &text, const String &ext){
@@ -255,10 +240,13 @@ void TopicEditor::FileBar(Bar& bar)
 	}
 	bar.Add("Print", CtrlImg::print(), THISBACK(Print))
 	   .Key(K_CTRL_P);
-	bar.Add("Export to PDF..", THISBACK(ExportPdf));
-	bar.Add("Export group  to PDF..", THISBACK(ExportGroupPdf));
-	bar.Add("Export to HTML..", THISBACK(ExportHTML));
-	bar.Add("Export group to HTML..", THISBACK(ExportGroupHTML));
+	bar.Add("Export to PDF..", IdeCommonImg::pdf(), [=] { ExportPdf(editor); });
+	bar.Add("Export group to PDF..", IdeCommonImg::pdf(), THISBACK(ExportGroupPdf));
+	bar.Add("Export to HTML..", IdeCommonImg::html(), THISBACK(ExportHTML));
+	bar.Add("Export group to HTML..", IdeCommonImg::html(), THISBACK(ExportGroupHTML));
+	bar.Add("Export as GitHub Markdown..", IdeCommonImg::MD(), [=] {
+		ExportMarkdown(editor.IsSelection() ? AsQTF(editor.GetSelection()) : editor.GetQTF(), GetFileTitle(topicpath));
+	});
 }
 
 void TopicEditor::EditMenu(Bar& bar)
@@ -424,3 +412,4 @@ bool TopicEditor::Key(dword key, int cnt)
 	}
 	return false;
 }
+#endif // flagGUI

@@ -1,0 +1,8 @@
+description "Visual Styling, Syntax Highlighting & Themes for DevEnv\377";
+
+uses
+	Draw,
+	DevEnv/Core;
+
+file
+	Draw.h;

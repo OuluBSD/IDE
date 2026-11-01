@@ -9,13 +9,42 @@ String AndroidNDK::GetDownloadUrl()
 	return "https://developer.android.com/ndk/downloads/index.html";
 }
 
+String AndroidNDK::ResolveNdkPath(const String& path)
+{
+	if(path.IsEmpty())
+		return String();
+
+	AndroidNDK direct;
+	direct.SetPath(path);
+	if(direct.ValidateDirect())
+		return path;
+
+	if(DirectoryExists(path)) {
+		Vector<String> candidates;
+		for(FindFile ff(AppendFileName(path, "*")); ff; ff.Next()) {
+			if(!ff.IsHidden() && ff.IsFolder()) {
+				AndroidNDK sub;
+				sub.SetPath(ff.GetPath());
+				if(sub.ValidateDirect())
+					candidates.Add(ff.GetPath());
+			}
+		}
+		if(!candidates.IsEmpty()) {
+			Sort(candidates, StdGreater<String>());
+			return candidates[0];
+		}
+	}
+
+	return path;
+}
+
 AndroidNDK::AndroidNDK()
 {
 }
 
 AndroidNDK::AndroidNDK(const String& path)
 {
-	this->path = path;
+	this->path = ResolveNdkPath(path);
 }
 
 AndroidNDK::~AndroidNDK()
@@ -24,10 +53,42 @@ AndroidNDK::~AndroidNDK()
 
 bool AndroidNDK::Validate() const
 {
-	if(!DirectoryExists(path) || !FileExists(GetNdkBuildPath()))
+	return ValidateDirect();
+}
+
+bool AndroidNDK::ValidateDirect() const
+{
+	if(path.IsEmpty() || !DirectoryExists(path) || !FileExists(GetNdkBuildPath()))
+		return false;
+	
+	if(!ValidateHostToolchain())
 		return false;
 	
 	return true;
+}
+
+bool AndroidNDK::ValidateHostToolchain() const
+{
+	String llvmPrebuilt = AppendFileName(AppendFileName(path, "toolchains"), AppendFileName("llvm", "prebuilt"));
+	if(!DirectoryExists(llvmPrebuilt))
+		return true;
+
+	String expected;
+#if defined(PLATFORM_WIN32) || defined(PLATFORM_WIN64)
+	expected = "windows";
+#elif defined(PLATFORM_OSX)
+	expected = "darwin";
+#else
+	expected = "linux";
+#endif
+
+	for(FindFile ff(AppendFileName(llvmPrebuilt, "*")); ff; ff.Next()) {
+		if(!ff.IsHidden() && ff.IsFolder()) {
+			if(ff.GetName().Find(expected) >= 0)
+				return true;
+		}
+	}
+	return false;
 }
 
 String AndroidNDK::FindDefaultPlatform() const

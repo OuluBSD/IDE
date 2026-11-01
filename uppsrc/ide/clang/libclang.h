@@ -1,3 +1,4 @@
+#pragma once
 /* This file is based on libclang.h from LLVM project
    Following copyright info and license applies to this file:
 
@@ -288,6 +289,43 @@ SOFTWARE.
 */
 
 // Reference: https://github.com/hdoc/llvm-project/tree/release/15.x/clang/include/clang-c
+
+/**
+ * Error codes returned by libclang routines.
+ *
+ * Zero (\c CXError_Success) is the only error code indicating success.  Other
+ * error codes, including not yet assigned non-zero values, indicate errors.
+ */
+enum CXErrorCode {
+  /**
+   * No error.
+   */
+  CXError_Success = 0,
+
+  /**
+   * A generic error code, no further details are available.
+   *
+   * Errors of this kind can get their own specific error codes in future
+   * libclang versions.
+   */
+  CXError_Failure = 1,
+
+  /**
+   * libclang crashed while performing the requested operation.
+   */
+  CXError_Crashed = 2,
+
+  /**
+   * The function detected that the arguments violate the function
+   * contract.
+   */
+  CXError_InvalidArguments = 3,
+
+  /**
+   * An AST deserialization error has occurred.
+   */
+  CXError_ASTReadError = 4
+};
 
 typedef struct {
   const void *data;
@@ -1345,6 +1383,32 @@ typedef struct {
   unsigned end_int_data;
 } CXSourceRange;
 
+/**
+ * Retrieve a source location representing the first character within a
+ * source range.
+ */
+CXSourceLocation clang_getRangeStart(CXSourceRange range);
+
+/**
+ * Retrieve a source location representing the last character within a
+ * source range.
+ */
+CXSourceLocation clang_getRangeEnd(CXSourceRange range);
+
+/**
+ * Retrieve the physical extent of the source construct referenced by
+ * the given cursor.
+ *
+ * The extent of a cursor starts with the file/line/column pointing at the
+ * first character within the source construct that the cursor refers to and
+ * ends with the last character within that source construct. For a
+ * declaration, the extent covers the declaration itself. For a reference,
+ * the extent covers the location of the reference (e.g., where the referenced
+ * entity was actually used).
+ */
+CXSourceRange clang_getCursorExtent(CXCursor);
+
+
 typedef void *CXFile;
 
 enum CXTypeKind {
@@ -1981,6 +2045,7 @@ CXPrintingPolicy clang_getCursorPrintingPolicy(CXCursor);
 void clang_PrintingPolicy_dispose(CXPrintingPolicy Policy);
 unsigned clang_getNumCompletionChunks(CXCompletionString completion_string);
 void clang_disposeTranslationUnit(CXTranslationUnit);
+unsigned clang_hashCursor(CXCursor);
 
 CXType clang_getTypedefDeclUnderlyingType(CXCursor C);
 CXCursor clang_getTypeDeclaration(CXType T);
@@ -1990,7 +2055,13 @@ CXTranslationUnit clang_parseTranslationUnit(
     const char *const *command_line_args, int num_command_line_args,
     struct CXUnsavedFile *unsaved_files, unsigned num_unsaved_files,
     unsigned options);
-
+    
+enum CXErrorCode clang_parseTranslationUnit2(
+    CXIndex CIdx, const char *source_filename,
+    const char *const *command_line_args, int num_command_line_args,
+    struct CXUnsavedFile *unsaved_files, unsigned num_unsaved_files,
+    unsigned options, CXTranslationUnit *out_TU);
+    
 int clang_reparseTranslationUnit(CXTranslationUnit TU, unsigned num_unsaved_files,
                                  struct CXUnsavedFile *unsaved_files,
                                  unsigned options);
@@ -2005,6 +2076,7 @@ CXString clang_getCompletionChunkText(CXCompletionString completion_string, unsi
 CXCompletionString clang_getCompletionChunkCompletionString(CXCompletionString completion_string, unsigned chunk_number);
 CXString clang_getCompletionParent(CXCompletionString completion_string, enum CXCursorKind *kind);
 unsigned clang_getCompletionPriority(CXCompletionString completion_string);
+CXString clang_getClangVersion(void);
 CXCodeCompleteResults *clang_codeCompleteAt(CXTranslationUnit TU, const char *complete_filename,
                                             unsigned complete_line, unsigned complete_column,
                                             struct CXUnsavedFile *unsaved_files,

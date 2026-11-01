@@ -1,0 +1,9 @@
+description "Headless Developer Environment Engine & Build System\377";
+
+uses
+	Core;
+
+file
+	Core.h,
+	BuildEvents.h,
+	CompilerMessage.h;

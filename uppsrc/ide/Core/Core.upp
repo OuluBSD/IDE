@@ -8,7 +8,9 @@ uses
 	plugin/zstd;
 
 file
+	AGENTS.md,
 	Core.h options(BUILDER_OPTION) PCH,
+	Common.cpp,
 	Ide.cpp,
 	Cache.cpp,
 	Core.cpp,
@@ -18,9 +20,16 @@ file
 	Assembly.cpp,
 	Package.cpp,
 	Workspace.cpp,
+	WorkspaceService.h,
+	WorkspaceService.cpp,
+	ConsoleHost.h,
+	ConsoleHost.cpp,
+	Export.cpp,
 	usc.cpp,
 	BinObj.cpp,
 	Signature.cpp,
+	ConsoleHeadless.h,
+	ConsoleHeadless.cpp,
 	Host readonly separator,
 	Host.h,
 	Host.cpp,
@@ -31,4 +40,3 @@ file
 	Copying,
 	Documentation readonly separator,
 	src.tpp;
-

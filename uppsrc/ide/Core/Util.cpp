@@ -32,6 +32,9 @@ String GetGitPath()
 	static String path;
 	ONCELOCK {
 		path = AppendFileName(GetExeFolder(), "\\bin\\mingit\\cmd\\git.exe");
+		if(!FileExists(path))
+			path = AppendFileName(AppendFileName(GetFileFolder(GetExeFolder()), "bin"),
+			                     "mingit/cmd/git.exe");
 		path = FileExists(path) ? String("\"") + path + "\"" : String("git");
 	}
 	return path;
@@ -116,4 +119,43 @@ bool IsFolder(const String& path)
 		return false;
 	FindFile ff(path);
 	return ff && ff.IsDirectory();
+}
+
+int FindFirstId(const String& s, const String& id)
+{
+	if(id.IsEmpty())
+		return -1;
+
+	int q = 0;
+	for(;;) {
+		q = s.Find(id, q);
+		if(q < 0)
+			return -1;
+		bool before_ok = q == 0 || !iscid(s[q - 1]);
+		bool after_ok = q + id.GetCount() >= s.GetCount() || !iscid(s[q + id.GetCount()]);
+		if(before_ok && after_ok)
+			return q;
+		q++;
+	}
+}
+
+int FindLastId(const String& s, const String& id)
+{
+	if(id.GetCount() == 0)
+		return -1;
+	int q = 0;
+	int r = -1;
+	for(;;) {
+		q = s.Find(id, q);
+		if(q < 0)
+			break;
+		if((q == 0 || !iscid(s[q - 1])) && // character before id
+		   (q + id.GetCount() >= s.GetCount() || !iscid(s[q + id.GetCount()]))) { // and after..
+			r = q; // need to find last one...
+			q += id.GetCount();
+		}
+		else
+			q++;
+	}
+	return r;
 }

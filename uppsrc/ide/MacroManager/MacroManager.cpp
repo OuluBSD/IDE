@@ -1,3 +1,4 @@
+#ifdef flagGUI
 #include "MacroManager.h"
 
 #include <ide/Common/Common.h>
@@ -343,3 +344,4 @@ void MacroManagerWindow::ReloadLocalMacros()
 }
 
 }
+#endif // flagGUI

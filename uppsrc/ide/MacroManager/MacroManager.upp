@@ -6,6 +6,7 @@ uses
 	ide/Common;
 
 file
+	AGENTS.md,
 	MacroManager.h,
 	MacroElement.cpp,
 	MacroManager.cpp,

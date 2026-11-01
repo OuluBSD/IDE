@@ -410,8 +410,8 @@ Vector<String> CppBuilder::CustomStep(const String& pf, const String& package_, 
 			o.Add(SourcePath(package, out[i]));
 		return o;
 	}
-	for(int i = 0; i < wspc.GetCount(); i++) {
-		const Array< ::CustomStep >& mv = wspc.GetPackage(i).custom;
+	for(int i = 0; i < wspc->GetCount(); i++) {
+		const Array< ::CustomStep >& mv = wspc->GetPackage(i).custom;
 		for(int j = 0; j < mv.GetCount(); j++) {
 			const ::CustomStep& m = mv[j];
 			if(MatchWhen(m.when, config.GetKeys()) && m.MatchExt(ext)) {
@@ -500,8 +500,8 @@ void CppBuilder::DoRc(Vector<String>& sfile, Vector<String>& soptions, const Pac
 				manifest_path = SourcePath(package, pkg[i]);
 	};
 	
-	for(int i = 0; i < wspc.GetCount(); i++)
-		DoManifest(wspc.GetPackage(i), wspc[i]);
+	for(int i = 0; i < wspc->GetCount(); i++)
+		DoManifest(wspc->GetPackage(i), (*wspc)[i]);
 	DoManifest(pkg, package); // main package manifest has priority
 	String d = PackageDirectory(package);
 	for(FindFile ff(d + "/*.*"); ff; ff.Next()) {

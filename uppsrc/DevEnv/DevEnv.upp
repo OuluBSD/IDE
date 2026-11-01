@@ -1,0 +1,12 @@
+description "Modular Development Environment Metapackage\377";
+
+uses
+	DevEnv/Core,
+	DevEnv/Draw,
+	DevEnv/Ctrl,
+	DevEnv/Ctrl/Core,
+	DevEnv/Ctrl/Lib,
+	DevEnv/App;
+
+file
+	AGENTS.md;

@@ -94,16 +94,28 @@ String NoCr(const char *s)
 	return out;
 }
 
-void MakeBuild::CreateHost(Host& host, const String& method, bool darkmode, bool disable_uhd)
+void MakeBuild::CreateHost(Host& host, const String& method, bool darkmode, bool disable_uhd, int scale)
 {
 	VectorMap<String, String> bm = GetMethodVars(method);
 	{
 		VectorMap<String, String> env = clone(Environment());
 		host.exedirs = SplitDirs(bm.Get("PATH", "") + ';' + env.Get("PATH", ""));
 #ifdef PLATFORM_WIN32
-		host.AddExecutable(GetExeDirFile("bin/mingit/cmd"), "git.exe");
-		host.AddExecutable(GetExeDirFile("bin/clang/bin"), "clang-format.exe");
-		
+		// TheIDE is normally installed next to bin/, while the standalone
+		// umk built by this repository is installed in bin/.  Probe both
+		// layouts; these tools are optional for compilation.
+		String git_dir = GetExeDirFile("bin/mingit/cmd");
+		if(!FileExists(AppendFileName(git_dir, "git.exe")))
+			git_dir = AppendFileName(GetFileFolder(GetExeFolder()), "bin/mingit/cmd");
+		if(FileExists(AppendFileName(git_dir, "git.exe")))
+			host.AddExecutable(git_dir, "git.exe");
+
+		String clang_format_dir = GetExeDirFile("bin/clang/bin");
+		if(!FileExists(AppendFileName(clang_format_dir, "clang-format.exe")))
+			clang_format_dir = AppendFileName(GetFileFolder(GetExeFolder()), "bin/clang/bin");
+		if(FileExists(AppendFileName(clang_format_dir, "clang-format.exe")))
+			host.AddExecutable(clang_format_dir, "clang-format.exe");
+
 		env.GetAdd("PATH") = Join(host.exedirs, ";");
 #else
 		env.GetAdd("PATH") = Join(host.exedirs, ":");
@@ -114,7 +126,8 @@ void MakeBuild::CreateHost(Host& host, const String& method, bool darkmode, bool
 			env.GetAdd("UPP_DISABLE_UHD__") = "1";
 		if(darkmode)
 			env.GetAdd("UPP_DARKMODE__") = "1";
-		// setup LD_LIBRARY_PATH on target dir, needed for all shared builds on posix
+		if(scale)
+			env.GetAdd("UPP_SCALE__") = AsString(scale);		// setup LD_LIBRARY_PATH on target dir, needed for all shared builds on posix
 #ifdef PLATFORM_POSIX
 		if(target != "")
 		{
@@ -127,7 +140,7 @@ void MakeBuild::CreateHost(Host& host, const String& method, bool darkmode, bool
 #endif
 		
 		if (IsAndroidMethod(method)) {
-			auto jdkPath = bm.Get("JDK_PATH", "");
+			auto jdkPath = Jdk::NormalizePath(bm.Get("JDK_PATH", ""));
 			if (!jdkPath.IsEmpty()) {
 				Cout() << "JDK Path: " << jdkPath << "\n";
 				env.GetAdd("JAVA_HOME") = jdkPath;
@@ -145,10 +158,10 @@ void MakeBuild::CreateHost(Host& host, const String& method, bool darkmode, bool
 	}
 }
 
-void MakeBuild::CreateHost(Host& host, bool darkmode, bool disable_uhd)
+void MakeBuild::CreateHost(Host& host, bool darkmode, bool disable_uhd, int scale)
 {
 	SetupDefaultMethod();
-	CreateHost(host, method, darkmode, disable_uhd);
+	CreateHost(host, method, darkmode, disable_uhd, scale);
 }
 
 One<Builder> MakeBuild::CreateBuilder(Host *host)
@@ -162,7 +175,7 @@ One<Builder> MakeBuild::CreateBuilder(Host *host)
 		ConsoleShow();
 		return nullptr;
 	}
-	Builder* b = (*BuilderMap().Get(builder))();
+	Builder* b = (*BuilderMap()[q])();
 	b->host = host;
 	b->script = bm.Get("SCRIPT", "");
 	if(AndroidBuilder::GetBuildersNames().Find(builder) > -1) {
@@ -172,16 +185,16 @@ One<Builder> MakeBuild::CreateBuilder(Host *host)
 			return nullptr;
 		}
 		pAb->sdk.SetPath((bm.Get("SDK_PATH", "")));
-		pAb->ndk.SetPath((bm.Get("NDK_PATH", "")));
+		pAb->ndk.SetPath(AndroidNDK::ResolveNdkPath(bm.Get("NDK_PATH", "")));
 		pAb->SetJdk(One<Jdk>(new Jdk(bm.Get("JDK_PATH", ""), host)));
 		
 		String platformVersion = bm.Get("SDK_PLATFORM_VERSION", "");
-		if(!platformVersion.IsEmpty())
+		if(!platformVersion.IsEmpty() && pAb->sdk.ValidatePlatform(platformVersion))
 			pAb->sdk.SetPlatform(platformVersion);
 		else
 			pAb->sdk.DeducePlatform();
 		String buildToolsRelease = bm.Get("SDK_BUILD_TOOLS_RELEASE", "");
-		if(!buildToolsRelease.IsEmpty())
+		if(!buildToolsRelease.IsEmpty() && pAb->sdk.ValidateBuildToolsRelease(buildToolsRelease))
 			pAb->sdk.SetBuildToolsRelease(buildToolsRelease);
 		else
 			pAb->sdk.DeduceBuildToolsRelease();
@@ -341,7 +354,7 @@ bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, i
 		return false;
 	}
 	Host host;
-	CreateHost(host, false, false);
+	CreateHost(host, false, false, 0);
 	One<Builder> b = CreateBuilder(&host);
 	b->onefile = onefile;
 	if(!b)
@@ -566,9 +579,11 @@ bool MakeBuild::Build(const Workspace& wspc, String mainparam, String outfile, b
 
 void MakeBuild::BuildWorkspace(Workspace& wspc, Host& host, Builder& builder)
 {
-	Index<String> p = PackageConfig(GetIdeWorkspace(), 0, GetMethodVars(method), mainconfigparam,
+	wspc.Scan(GetMain());
+	Index<String> p = PackageConfig(wspc, 0, GetMethodVars(method), mainconfigparam,
 	                                host, builder);
 	wspc.Scan(GetMain(), p.GetKeys());
+	const_cast<Workspace&>(GetIdeWorkspace()).Scan(GetMain(), p.GetKeys());
 }
 
 bool MakeBuild::Build()
@@ -579,19 +594,22 @@ bool MakeBuild::Build()
 		return false;
 	}
 	Host host;
-	CreateHost(host, false, false);
+	CreateHost(host, false, false, 0);
 	One<Builder> builder = CreateBuilder(&host);
 	if(!builder)
 		return false;
 	String dummy;
 	String cc = builder->CompilerName();
-	if(cc.GetCount() && HostSys(cc + " --version", dummy)) {
+	if(!builder->IsInternalCompiler() &&
+		cc.GetCount() && HostSys(cc + " --version", dummy)) {
 		PutConsole("Error: Cannot invoke compiler '" + cc + "'");
 		ConsoleShow();
 		return false;
 	}
 	Workspace wspc;
 	BuildWorkspace(wspc, host, *builder);
+	if(CppBuilder *cb = dynamic_cast<CppBuilder*>(~builder))
+		cb->wspc = &wspc;
 	return Build(wspc, mainconfigparam, Null);
 }
 
@@ -599,7 +617,7 @@ void MakeBuild::CleanPackage(const Workspace& wspc, int package)
 {
 	PutConsole(Format("Cleaning %s", wspc[package]));
 	Host host;
-	CreateHost(host, false, false);
+	CreateHost(host, false, false, 0);
 	One<Builder> builder = CreateBuilder(&host);
 	if(!builder)
 		return;
@@ -616,7 +634,7 @@ void MakeBuild::Clean()
 	ConsoleClear();
 
 	Host host;
-	CreateHost(host, false, false);
+	CreateHost(host, false, false, 0);
 	One<Builder> builder = CreateBuilder(&host);
 	if(!builder)
 		return;
@@ -650,7 +668,10 @@ bool MakeBuild::IsAndroidMethod(const String& method) const
 	if (builder.IsEmpty())
 		return false;
 	
-	One<Builder> pBuilder = (*BuilderMap().Get(builder))();
+	int i = BuilderMap().Find(builder);
+	if(i < 0)
+		return false;
+	One<Builder> pBuilder = (*BuilderMap()[i])();
 	if (!pBuilder)
 		return false;
 	
@@ -664,7 +685,7 @@ int HostSys(const char *cmd, String& out)
 	if(!mb)
 		return Null;
 	Host host;
-	mb->CreateHost(host, false, false);
+	mb->CreateHost(host, false, false, 0);
 	LocalProcess p;
 	host.canlog = false;
 	if(host.StartProcess(p, cmd))

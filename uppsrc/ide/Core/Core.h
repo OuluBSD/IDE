@@ -25,6 +25,18 @@ bool   SaveChangedFile(const char *path, String data, bool delete_empty = false)
 
 bool IsDoc(String s);
 
+void ForAllSourceFiles(Event<const VectorMap<String, String>&> fn);
+void ForAllNests(Event<const Vector<String>&> fn);
+void SetAllSourceFiles(VectorMap<String, String> files, Vector<String> nests);
+Index<String> GetAllNests(bool sleep = false);
+
+void DelTemps();
+extern bool SilentMode;
+void Puts(const char *s);
+int  CommaSpace(int c);
+void ReduceCfgCache();
+bool IsAssembly(const String& s);
+
 void CopyFile(const String& dst, const String& src, bool brc = false);
 void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool all, bool brc = false);
 
@@ -155,6 +167,7 @@ public:
 	virtual void             IdeConsoleEndGroup() = 0;
 	virtual bool             IdeConsoleWait() = 0;
 	virtual bool             IdeConsoleWait(int slot) = 0;
+	virtual bool             IdeConsoleGetError() = 0;
 	virtual void             IdeConsoleOnFinish(Event<>  cb) = 0;
 	
 	virtual void             IdeProcessEvents() = 0;
@@ -220,6 +233,7 @@ void             IdeConsoleBeginGroup(String group);
 void             IdeConsoleEndGroup();
 bool             IdeConsoleWait();
 bool             IdeConsoleWait(int slot);
+bool             IdeConsoleGetError();
 void             IdeConsoleOnFinish(Event<>  cb);
 
 void             IdeProcessEvents();
@@ -313,6 +327,9 @@ String CatAnyPath(String path, const char *more);
 
 bool   IsFullDirectory(const String& d);
 bool   IsFolder(const String& path);
+int    FindFirstId(const String& s, const String& id);
+int    FindLastId(const String& s, const String& id);
+inline int FindId(const String& s, const String& id) { return FindLastId(s, id); }
 
 bool   IsCSourceFile(const char *path);
 bool   IsCHeaderFile(const char *path);
@@ -337,6 +354,7 @@ String GetVarsName();
 String VarFilePath();
 Vector<String> GetUppDirsRaw();
 Vector<String> GetUppDirs();
+Vector<String> GetAiDirsRaw();
 bool   IsHubDir(const String& path);
 String GetUppDir();
 
@@ -356,6 +374,8 @@ String SourcePath(const String& package, const String& name);
 String PackageDirectory(const String& name);
 bool   IsNestReadOnly(const String& path);
 
+String GetPackagePathNest(const String& path);
+String GetPackageNestRelativePath(const String& path);
 String GetPathNest(const String& path);
 
 void   SplitPathMap(const char *path_map, Vector<String>& local, Vector<String>& remote);
@@ -375,6 +395,7 @@ struct OptItem {
 	String   text;
 
 	String ToString() const { return when + ": " + text ; }
+	void Xmlize(XmlIO& xml);
 };
 
 struct CustomStep {
@@ -388,6 +409,7 @@ struct CustomStep {
 
 	String GetExt() const;
 	bool   MatchExt(const char *fn) const;
+	void Xmlize(XmlIO& xml);
 };
 
 Vector<String> Combine(const Vector<String>& conf, const char *flags);
@@ -439,15 +461,19 @@ public:
 
 		File()                            { Init(); }
 		File(const String& s) : String(s) { Init(); }
+		void Xmlize(XmlIO& xml);
 	};
 	struct Config {
 		String name;
 		String param;
+		void Xmlize(XmlIO& xml);
 	};
 	byte                     charset;
 	int                      tabsize;
 	bool                     noblitz;
 	bool                     nowarnings;
+	String                   path;
+	String                   dir;
 	String                   description;
 	Vector<String>           accepts;
 	Array<OptItem>           flag;
@@ -474,6 +500,7 @@ public:
 
 	bool  Load(const char *path);
 	bool  Save(const char *file) const;
+	void  Xmlize(XmlIO& xml);
 
 	static void SetPackageResolver(bool (*Resolve)(const String& error, const String& path, int line));
 
@@ -504,6 +531,12 @@ public:
 
 	void     Dump();
 };
+
+#include "WorkspaceService.h"
+#include "ConsoleHost.h"
+
+void IdeCoreGatherProjectFiles(const Workspace& wspc, Index<String>& used);
+bool IdeCoreExportProjectFiles(const Workspace& wspc, const String& ep, Index<String>& used, bool all, const Vector<String>& upp, Gate<int> step);
 
 struct Ide;
 
@@ -593,6 +626,7 @@ struct Builder {
 	virtual void SaveBuildInfo(const String& package) {}
 	virtual String GetBuildInfoPath() const { return String(); }
 	virtual String CompilerName() const { return Null; }
+	virtual bool IsInternalCompiler() const {return false;}
 
 	Builder()          { doall = false; main_conf = false; }
 	virtual ~Builder() {}

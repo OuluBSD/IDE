@@ -7,6 +7,10 @@ bool RelaxedIndexerDependencies = true;
 int  IndexerThreads;
 int  ParsedFiles;
 int  LibClangCppVersion = 17;
+String ClangIsystemOverride;
+
+void (*WhenClangAstParsed)(String& includes, const String& path, ClangNode& ast) = nullptr;
+void (*WhenClangFileLoaded)(const String& includes, const String& path) = nullptr;
 
 void ClangConfigSerialize(Stream& s)
 {
@@ -97,115 +101,103 @@ bool IsMethod(int kind)
 
 bool IsVariable(int kind)
 {
-	return findarg(kind, CXCursor_VarDecl, CXCursor_FieldDecl) >= 0;
+	return findarg(kind, CXCursor_VarDecl, CXCursor_FieldDecl, CXCursor_ParmDecl) >= 0;
 }
 
-int FindId(const String& s, const String& id) {
-	if(id.GetCount() == 0)
-		return -1;
-	int q = 0;
-	int r = -1;
-	for(;;) {
-		q = s.Find(id, q);
-		if(q < 0)
-			break;
-		if((q == 0 || !iscid(s[q - 1])) && // character before id
-		   (q + id.GetCount() >= s.GetCount() || !iscid(s[q + id.GetCount()]))) { // and after..
-			r = q; // need to find last one...
-			q += id.GetCount();
+bool IsDecl(int kind) {
+	return kind >= (int)CXCursor_FirstDecl && kind <= (int)CXCursor_LastDecl;
+}
+
+bool IsTypeDecl(int kind)
+{
+	return findarg(kind,
+		CXCursor_UnexposedDecl,
+		CXCursor_StructDecl, CXCursor_UnionDecl, CXCursor_ClassDecl, CXCursor_EnumDecl,
+		CXCursor_TypedefDecl, CXCursor_Namespace, CXCursor_TemplateTypeParameter,
+		CXCursor_ClassTemplate, CXCursor_ClassTemplatePartialSpecialization,
+		CXCursor_NamespaceAlias, CXCursor_UsingDeclaration,
+		CXCursor_TypeAliasDecl,
+		CXCursor_TypeAliasTemplateDecl,
+		CXCursor_OverloadedDeclRef,
+		CXCursor_TemplateTemplateParameter
+		) >= 0;
+}
+
+bool IsErrorKind(int kind)
+{
+	return findarg(kind,
+	  CXCursor_FirstInvalid,
+	  CXCursor_InvalidFile,
+	  CXCursor_NoDeclFound,
+	  CXCursor_NotImplemented,
+	  CXCursor_InvalidCode
+		) >= 0;
+}
+
+bool IsTypeRef(int kind)
+{
+	return kind >= (int)CXCursor_FirstRef && kind <= (int)CXCursor_LastRef;
+}
+
+String AnnotationItem::ToString() const {
+	if (type.GetCount()) return type + " " + id;
+	else return id;
+}
+
+String ReferenceItem::ToString() const {
+	return Format("%s (%d:%d -> %d:%d)", id, pos.x,pos.y, ref_pos.x,ref_pos.y);
+}
+
+String ReferenceItem::MakeLocalString(const String& filepath) const {
+	String s;
+	s << filepath << ":" << pos.y << ":" << pos.x << ":" << id;
+	return s;
+}
+
+
+String ReferenceItem::MakeTargetString(const String& filepath) const {
+	String s;
+	s << filepath << ":" << ref_pos.y << ":" << ref_pos.x << ":" << id;
+	return s;
+}
+
+
+
+String ClangNode::GetTreeString(int depth) const {
+	String s;
+	s.Cat('\t', depth);
+	s << FetchString(clang_getCursorKindSpelling((CXCursorKind)kind));
+	if (!id.IsEmpty()) s << ": " << id;
+	s << "\n";
+	for (auto& n : sub)
+		s << n.GetTreeString(depth+1);
+	return s;
+}
+
+hash_t ClangNode::GetCommonHash() const {
+	CombineHash ch;
+	ch.Do(kind).Do(id).Do(type);
+	for (const auto& s : sub)
+		ch.Put(s.GetCommonHash());
+	return ch;
+}
+
+bool ClangNode::TranslateTypeHash(const VectorMap<hash_t,hash_t>& translation) {
+	if (type_hash) {
+		int i = translation.Find(type_hash);
+		if (i < 0) {
+			LOG("ClangNode::TranslateTypeHash: error: translation type not found: " + id + "(" + type + ")");
+			return false;
 		}
-		else
-			q++;
+		type_hash = translation[i];
 	}
-	return r;
-};
-
-String GetClass(const AnnotationItem& m)
-{
-	String cls = m.id;
-	int q;
-	if(m.kind == CXCursor_Constructor) {
-		q = cls.Find("::" + m.name + "(");
-		if(q >= 0)
-			q += 2;
-	}
-	else
-	if(m.kind == CXCursor_Destructor) {
-		q = cls.Find('~');
-	}
-	else
-		q = FindId(cls, m.name);
-
-	if(q >= 0) {
-		cls.Trim(q);
-		if(m.nspace.GetCount())
-			cls.TrimStart(m.nspace + "::");
-		return cls;
-	}
-	
-	return Null;
+	for (auto& s : sub)
+		if (!s.TranslateTypeHash(translation))
+			return false;
+	return true;
 }
 
-String GetNameFromId(const String& id)
+bool IsPreprocessingCursor(CXCursor c)
 {
-	String name;
-	try {
-		CParser p(id);
-		while(!p.IsEof())
-			if(p.IsId())
-				name = p.ReadId();
-			else
-			if(!p.Char(':'))
-				break;
-	}
-	catch(CParser::Error) {}
-	return name;
-}
-
-String MakeDefinition(const AnnotationItem& m, const String& klass)
-{
-	String result;
-	String pretty = m.pretty;
-	pretty.TrimStart("static ");
-	int q = FindId(pretty, m.name);
-	if(q < 0)
-		result << pretty;
-	else
-		result << pretty.Mid(0, q) << klass << pretty.Mid(q);
-
-	const char *s = result;
-	int lvl = 0;
-	String r;
-	while(*s) {
-		if(*s == '(')
-			lvl++;
-		if(*s == ')')
-			lvl--;
-		if(lvl == 1 && *s == '=') { // skip default parameter
-			while(r.GetCount() && s[-1] == ' ') {
-				s--;
-				r.TrimLast();
-			}
-			while(*s) {
-				if((*s == ',' || *s == ')') && lvl == 1) {
-					r.Cat(*s++);
-					break;
-				}
-				if(*s == '(')
-					lvl++;
-				if(*s == ')')
-					lvl--;
-				s++;
-			}
-		}
-		else
-			r.Cat(*s++);
-	}
-	r << "\n{\n}\n\n";
-	return r;
-}
-
-String MakeDefinition(const AnnotationItem& m)
-{
-	return MakeDefinition(m, GetClass(m));
+	return c.kind >= 500 && c.kind < 600;
 }

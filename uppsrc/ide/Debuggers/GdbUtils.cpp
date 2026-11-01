@@ -4,6 +4,8 @@ using namespace Upp;
 
 #if defined(PLATFORM_WIN32)
 
+#define METHOD_NAME UPP_METHOD_NAME("GdbWindowsUtils")
+
 String Gdb::BreakRunning(int pid)
 {
 	HANDLE handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);

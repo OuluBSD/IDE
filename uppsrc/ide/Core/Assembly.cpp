@@ -218,6 +218,12 @@ Vector<String> GetUppDirs()
 	return s;
 }
 
+Vector<String> GetAiDirsRaw()
+{
+	Vector<String> s = SplitDirs(GetVar("AI"));
+	return s;
+}
+
 bool IsHubDir(const String& path)
 {
 	return NormalizePath(path).StartsWith(GetHubDir());
@@ -243,7 +249,7 @@ String Nest::PackageDirectory0(const String& name)
 		if(IsDirectoryPackage(dir))
 			return dir;
 	}
-	return d.GetCount() ? NormalizePath(AppendFileName(AppendFileName(d[0], uppfile), pname) + ".upp") : String();
+	return d.GetCount() ? NormalizePath(AppendFileName(d[0], uppfile)) : String();
 }
 
 String Nest::PackageDirectory(const String& name)

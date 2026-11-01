@@ -104,21 +104,31 @@ void DoAnnotations(CurrentFileClang& cfc, int64 serial) {
 		d.pos.y -= cfc.parsed_file.line_delta;
 		d.text = text;
 	});
+#ifdef flagGUI
 	Ctrl::Call([&] {
+#endif
 		if(cfc.parsed_file.filename == current_file.filename &&
 		   cfc.parsed_file.real_filename == current_file.real_filename &&
 		   cfc.parsed_file.includes == current_file.includes &&
 		   serial == current_file_serial) {
 			annotations_done(f, ds);
 			FileAnnotation fa;
+			fa.path = cfc.parsed_file.real_filename;
 			fa.defines = cfc.parsed_file.defines;
 			fa.includes = cfc.parsed_file.includes;
-			fa.items = pick(f.items);
-			fa.refs = pick(f.refs);
+			static_cast<CppFileInfo&>(fa) = pick(f);
 			fa.time = Time::Low();
-			CodeIndex().GetAdd(NormalizePath(cfc.parsed_file.real_filename)) = pick(fa);
+			fa.master_file = cfc.parsed_file.filename;
+			String path = NormalizePath(cfc.parsed_file.real_filename);
+			CodeIndex().GetAdd(path) = pick(fa);
+		#ifndef flagV1
+			if(WhenClangAstParsed)
+				WhenClangAstParsed(fa.includes, path, v.ast);
+		#endif
 		}
+#ifdef flagGUI
 	});
+#endif
 };
 
 void CurrentFileThread()
@@ -128,6 +138,16 @@ void CurrentFileThread()
 	while(!Thread::IsShutdownThreads()) {
 		bool was_parsing;
 		do {
+			int ext_i = -1;
+			if(current_file.filename.GetCount()) {
+				String ext = GetFileExt(current_file.filename);
+				ext_i = Indexer::FindExtensionByExt(ext);
+				if (ext_i >= 0) {
+					was_parsing = Indexer::Extensions()[ext_i].Get().RunCurrentFile();
+					continue;
+				}
+			}
+			
 			was_parsing = false;
 			CurrentFileContext f, af;
 			int64 serial;
@@ -226,10 +246,14 @@ void CurrentFileThread()
 							PutAssist(String() << cfc.parsed_file.filename << " autocomplete processed in " << msecs() - tm << " ms");
 						}
 					}
+#ifdef flagGUI
 					Ctrl::Call([&] {
+#endif
 						if(aserial == autocomplete_serial)
 							autocomplete_done(item);
+#ifdef flagGUI
 					});
+#endif
 					current_file_parsing = false;
 					GuiLock __;
 					do_autocomplete = false;

@@ -4,6 +4,7 @@ uses
 	ide/Core;
 
 file
+	AGENTS.md,
 	Java.h,
 	JavaVersion.cpp,
 	Java.cpp,

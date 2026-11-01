@@ -1,12 +1,15 @@
 description "TheIDE - common dialogs and interfaces\377B";
 
 uses
-	ide\Core,
+	ide\Core;
+
+uses(GUI)
 	CtrlLib,
 	Esc,
 	CodeEditor;
 
 file
+	AGENTS.md,
 	Common.h options(BUILDER_OPTION) PCH,
 	ComDlg.cpp,
 	Module.cpp,
@@ -14,4 +17,3 @@ file
 	common.iml,
 	Info readonly separator,
 	Copying;
-

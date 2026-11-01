@@ -1,2 +1,13 @@
 .DS_Store
-
+*~
+*.swp
+*.bak
+out/
+.bin/
+*.exe
+*.o
+*.a
+*.so
+*.dylib
+.cache/
+applied-patches/

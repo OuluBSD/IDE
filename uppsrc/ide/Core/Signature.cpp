@@ -1,4 +1,5 @@
 #include "Core.h"
+#include <ide/clang/clang.h>
 
 #define LTIMING(x)
 
@@ -493,4 +494,143 @@ String SignatureQtf(const String& name, const String& pretty, const String& nest
 		qtf << ']';
 	}
 	return qtf + "]";
+}
+
+String GetClass(const AnnotationItem& m)
+{
+	String cls = m.id;
+	int q;
+	if(m.kind == CXCursor_Constructor) {
+		q = cls.Find("::" + m.name + "(");
+		if(q >= 0)
+			q += 2;
+	}
+	else
+	if(m.kind == CXCursor_Destructor) {
+		q = cls.Find('~');
+	}
+	else
+		q = FindLastId(cls, m.name);
+
+	if(q >= 0) {
+		cls.Trim(q);
+		if(m.nspace.GetCount())
+			cls.TrimStart(m.nspace + "::");
+		return cls;
+	}
+	
+	return Null;
+}
+
+String GetNameFromId(const String& id)
+{
+	String name;
+	try {
+		CParser p(id);
+		while(!p.IsEof())
+			if(p.IsId())
+				name = p.ReadId();
+			else
+			if(!p.Char(':'))
+				break;
+	}
+	catch(CParser::Error) {}
+	return name;
+}
+
+String MakeDefinition(const AnnotationItem& m, const String& klass)
+{
+	String result;
+	String pretty = m.pretty;
+	pretty.TrimStart("static ");
+	int q = FindLastId(pretty, m.name);
+	if(q < 0)
+		result << pretty;
+	else
+		result << pretty.Mid(0, q) << klass << pretty.Mid(q);
+
+	const char *s = result;
+	int lvl = 0;
+	String r;
+	while(*s) {
+		if(*s == '(')
+			lvl++;
+		if(*s == ')')
+			lvl--;
+		if(lvl == 1 && *s == '=') { // skip default parameter
+			while(r.GetCount() && s[-1] == ' ') {
+				s--;
+				r.TrimLast();
+			}
+			while(*s) {
+				if((*s == ',' || *s == ')') && lvl == 1) {
+					r.Cat(*s++);
+					break;
+				}
+				if(*s == '(')
+					lvl++;
+				if(*s == ')')
+					lvl--;
+				s++;
+			}
+		}
+		else
+			r.Cat(*s++);
+	}
+	r << "\n{\n}\n\n";
+	return r;
+}
+
+String MakeDefinition(const AnnotationItem& m)
+{
+	return MakeDefinition(m, GetClass(m));
+}
+
+void AnnotationItem::operator=(const AnnotationItem& b) {
+	id = b.id;
+	name = b.name;
+	type = b.type;
+	pretty = b.pretty;
+	nspace = b.nspace;
+	uname = b.uname;
+	nest = b.nest;
+	unest = b.unest;
+	bases = b.bases;
+	pos = b.pos;
+	begin = b.begin;
+	end = b.end;
+	kind = b.kind;
+	definition = b.definition;
+	isvirtual = b.isvirtual;
+	isstatic = b.isstatic;
+	if (b.parent_id.GetCount()) // Use parent_id instead of parent_type
+		parent_id = b.parent_id;
+}
+
+bool AnnotationItem::IsSameContent(const AnnotationItem& b) const {
+	return	id == b.id &&
+			name == b.name &&
+			type == b.type &&
+			pretty == b.pretty &&
+			nspace == b.nspace &&
+			uname == b.uname &&
+			nest == b.nest &&
+			unest == b.unest &&
+			bases == b.bases &&
+			kind == b.kind &&
+			definition == b.definition &&
+			isvirtual == b.isvirtual &&
+			isstatic == b.isstatic &&
+			parent_id == b.parent_id;
+}
+
+bool AnnotationItem::operator==(const AnnotationItem& b) const {
+	return	IsSameContent(b) &&
+			pos == b.pos &&
+			begin == b.begin &&
+			end == b.end;
+}
+
+bool AnnotationItem::IsLineAreaPartialMatch(const AnnotationItem& b) const {
+	return begin.y == b.begin.y && end.y == b.end.y;
 }
