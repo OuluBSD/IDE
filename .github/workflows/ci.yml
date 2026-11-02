@@ -72,6 +72,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install libpng lz4 pcre2 xxhash zstd xz bzip2
+          echo "CPATH=/opt/homebrew/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=/opt/homebrew/lib" >> "$GITHUB_ENV"
 
       - name: Bootstrap umk with UppBootstrap
         env:
@@ -154,6 +156,14 @@ jobs:
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Dependencies via vcpkg (Windows)
+        shell: cmd
+        run: |
+          vcpkg install zlib:x64-windows xxhash:x64-windows lz4:x64-windows pcre2:x64-windows
+          vcpkg integrate install
+          echo INCLUDE=%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\include;%INCLUDE%>>%GITHUB_ENV%
+          echo LIB=%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib;%LIB%>>%GITHUB_ENV%
 
       - name: Bootstrap umk with UppBootstrap
         shell: cmd
