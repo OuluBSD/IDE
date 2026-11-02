@@ -25,7 +25,7 @@ jobs:
             bm: GCC
           - os: macos-latest
             compiler: clang++
-            bm: CLANG
+            bm: CLANG_macOS
 
     steps:
       - name: Checkout IDE
@@ -66,7 +66,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y make clang g++ libbz2-dev libexpat1-dev libfontconfig1-dev libfreetype-dev liblz4-dev liblzma-dev libpcre2-dev libpng-dev libx11-dev libxcb1-dev libxxhash-dev libzstd-dev zlib1g-dev libgtk-3-dev
+          sudo apt-get install -y make clang g++ libbz2-dev libexpat1-dev libfontconfig1-dev libfreetype-dev liblz4-dev liblzma-dev libpcre2-dev libpng-dev libx11-dev libxcb1-dev libxxhash-dev libzstd-dev zlib1g-dev libgtk-3-dev libnotify-dev
 
       - name: Install System Dependencies (macOS)
         if: runner.os == 'macOS'
