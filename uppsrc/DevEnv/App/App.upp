@@ -8,4 +8,13 @@ file
 	main.cpp;
 
 mainconfig
-	"" = "GUI";
+	"" = "GUI",
+	"Full" = "GUI AI SHELL DROPTERM MCP",
+	"Full NET" = "GUI AI SHELL DROPTERM MCP NET CURL",
+	"Full Audio" = "GUI AI SHELL DROPTERM MCP NET CURL AUDIO SYS_PORTAUDIO",
+	"Full Debug" = "GUI AI SHELL DROPTERM MCP DEBUGCODE",
+	"Vanilla Debug" = "GUI DEBUGCODE",
+	"Vanilla UseMalloc" = "GUI USEMALLOC",
+	"Vanilla HeapDbg" = "GUI HEAPDBG CHECKINIT",
+	"Vanilla X11" = "GUI X11",
+	"Vanilla Wayland" = "GUI GTK WAYLAND";
