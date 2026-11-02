@@ -3,6 +3,7 @@
 *.swp
 *.bak
 out/
+bin/
 .bin/
 *.exe
 *.o
