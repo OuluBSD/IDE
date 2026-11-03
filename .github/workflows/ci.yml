@@ -165,12 +165,15 @@ jobs:
         run: |
           vcpkg install zlib:x64-windows xxhash:x64-windows lz4:x64-windows pcre2:x64-windows libpng:x64-windows libjpeg-turbo:x64-windows
           vcpkg integrate install
-          if exist "%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib\zlib.lib" (
-            copy "%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib\zlib.lib" "%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib\zs.lib"
-            copy "%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib\zlib.lib" "%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib\z.lib"
+          if exist "C:\vcpkg\installed\x64-windows\lib\zlib.lib" (
+            copy "C:\vcpkg\installed\x64-windows\lib\zlib.lib" "C:\vcpkg\installed\x64-windows\lib\zs.lib"
+            copy "C:\vcpkg\installed\x64-windows\lib\zlib.lib" "C:\vcpkg\installed\x64-windows\lib\z.lib"
           )
-          echo INCLUDE=%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\include;%INCLUDE%>>%GITHUB_ENV%
-          echo LIB=%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\lib;%LIB%>>%GITHUB_ENV%
+          if exist "C:\vcpkg\installed\x64-windows\lib\pcre2-8.lib" (
+            copy "C:\vcpkg\installed\x64-windows\lib\pcre2-8.lib" "C:\vcpkg\installed\x64-windows\lib\pcre2.lib"
+          )
+          echo INCLUDE=C:\vcpkg\installed\x64-windows\include;%INCLUDE%>>%GITHUB_ENV%
+          echo LIB=C:\vcpkg\installed\x64-windows\lib;%LIB%>>%GITHUB_ENV%
 
       - name: Bootstrap umk with UppBootstrap
         shell: cmd
