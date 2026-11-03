@@ -9,6 +9,7 @@ file
 
 mainconfig
 	"" = "GUI",
+	"AI" = "GUI AI",
 	"Full" = "GUI AI SHELL DROPTERM",
 	"Full NET" = "GUI AI SHELL DROPTERM NET CURL",
 	"Full Audio" = "GUI AI SHELL DROPTERM NET CURL AUDIO SYS_PORTAUDIO",

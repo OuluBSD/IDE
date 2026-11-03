@@ -1,8 +1,12 @@
-description "Reusable Developer UI Widgets (Canvas, Gutter, Tree, Console)\377";
+description "Reusable Developer UI Widgets (Canvas, Gutter, Tree, Console, AI Assistant)\377";
 
 uses
 	CtrlLib,
 	DevEnv/Draw;
 
+uses(AI) SweAgent;
+
 file
-	Ctrl.h;
+	Ctrl.h,
+	AiAssistantCtrl.h,
+	AiAssistantCtrl.cpp;

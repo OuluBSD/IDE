@@ -4,6 +4,8 @@
 #include <CtrlLib/CtrlLib.h>
 #include <DevEnv/Draw/Draw.h>
 
+#include "AiAssistantCtrl.h"
+
 namespace Upp {
 namespace DevEnv {
 

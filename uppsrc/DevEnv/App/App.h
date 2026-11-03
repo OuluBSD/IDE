@@ -10,6 +10,9 @@ class AppWindow : public TopWindow {
 public:
 	AppWindow();
 	virtual ~AppWindow() = default;
+
+private:
+	AiAssistantCtrl ai_assistant;
 };
 
 }
