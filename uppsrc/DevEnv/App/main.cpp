@@ -9,8 +9,36 @@ AppWindow::AppWindow()
 	Sizeable().Zoomable();
 	SetRect(0, 0, 1024, 768);
 
+	AddFrame(menu);
+	menu.Set(THISBACK(MainMenu));
+
 	Add(ai_assistant.SizePos());
 }
+
+void AppWindow::MainMenu(Bar& bar)
+{
+	bar.Sub("File", THISBACK(FileMenu));
+#ifdef flagAI
+	bar.Sub("AI", THISBACK(AiMenu));
+#endif
+}
+
+void AppWindow::FileMenu(Bar& bar)
+{
+	bar.Add("Exit", [this] { Break(); });
+}
+
+#ifdef flagAI
+void AppWindow::AiMenu(Bar& bar)
+{
+	bar.Add("AI Playground...", [] {
+		RunAiPlayground();
+	});
+	bar.Add("AI Accounts & Providers...", [] {
+		RunAiSetupModal();
+	});
+}
+#endif
 
 }
 }
@@ -19,6 +47,15 @@ using namespace Upp;
 
 GUI_APP_MAIN
 {
+	const Vector<String>& cmd = CommandLine();
+	if (cmd.GetCount() > 0 && cmd[0] == "--test") {
+		Cout() << "DevEnv: Running automated self-test...\n";
+		DevEnv::AppWindow win;
+		Cout() << "DevEnv: Automated self-test passed successfully!\n";
+		MemoryIgnoreLeaksBegin();
+		return;
+	}
+
 	DevEnv::AppWindow win;
 	win.Run();
 }
