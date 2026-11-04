@@ -58,6 +58,12 @@ jobs:
           repository: OuluBSD/SuperIntelligence
           path: SuperIntelligence
 
+      - name: Checkout VFS
+        uses: actions/checkout@v4
+        with:
+          repository: OuluBSD/VFS
+          path: VFS
+
       - name: Checkout Upstream U++ (ultimatepp)
         uses: actions/checkout@v4
         with:
@@ -73,7 +79,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y make clang g++ libbz2-dev libexpat1-dev libfontconfig1-dev libfreetype-dev liblz4-dev liblzma-dev libpcre2-dev libpng-dev libx11-dev libxcb1-dev libxxhash-dev libzstd-dev zlib1g-dev libgtk-3-dev libnotify-dev
+          sudo apt-get install -y make clang g++ libbz2-dev libexpat1-dev libfontconfig1-dev libfreetype-dev liblz4-dev liblzma-dev libpcre2-dev libpng-dev libx11-dev libxcb1-dev libxxhash-dev libzstd-dev zlib1g-dev libgtk-3-dev libnotify-dev xvfb
 
       - name: Install System Dependencies (macOS)
         if: runner.os == 'macOS'
@@ -123,6 +129,11 @@ jobs:
           ls -lh IDE/bin/App
           file IDE/bin/App
 
+      - name: Run Self-Tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a IDE/bin/App --test
+
   build-windows:
     name: Windows (windows-latest - MSVC)
     runs-on: windows-latest
@@ -156,6 +167,12 @@ jobs:
         with:
           repository: OuluBSD/SuperIntelligence
           path: SuperIntelligence
+
+      - name: Checkout VFS
+        uses: actions/checkout@v4
+        with:
+          repository: OuluBSD/VFS
+          path: VFS
 
       - name: Checkout Upstream U++ (ultimatepp)
         uses: actions/checkout@v4
@@ -227,6 +244,7 @@ jobs:
         run: |
           cd IDE
           uppbuilder.exe DevEnv/App -m MSVS22x64 -v
+          uppbuilder.exe DevEnv/App -m MSVS22x64 --mainconf "AI" -v
 
       - name: Verify App Binary
         shell: cmd
