@@ -45,6 +45,12 @@ void AppWindow::AiMenu(Bar& bar)
 
 using namespace Upp;
 
+namespace Upp {
+#ifdef UPP_HEAP
+extern bool NoMemoryLeaksCheck;
+#endif
+}
+
 GUI_APP_MAIN
 {
 	const Vector<String>& cmd = CommandLine();
@@ -52,7 +58,9 @@ GUI_APP_MAIN
 		Cout() << "DevEnv: Running automated self-test...\n";
 		DevEnv::AppWindow win;
 		Cout() << "DevEnv: Automated self-test passed successfully!\n";
-		MemoryIgnoreLeaksBegin();
+#ifdef UPP_HEAP
+		NoMemoryLeaksCheck = true;
+#endif
 		return;
 	}
 
