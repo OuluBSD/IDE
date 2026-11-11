@@ -5,5 +5,6 @@
 #include "CompilerMessage.h"
 #include "BuildEvents.h"
 #include "PortageManager.h"
+#include "AgentBridge.h"
 
 #endif

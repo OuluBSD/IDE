@@ -12,6 +12,19 @@ AppWindow::AppWindow()
 	AddFrame(menu);
 	menu.Set(THISBACK(MainMenu));
 
+	AddFrame(status);
+	status.Set(0, "Ready", 0);
+	status.Set(1, "AgentIPC: Offline", 160);
+	status.Set(2, "Tests: Idle", 200);
+
+	agent.WhenTestResult = [this](const String& target, bool pass, int ms) {
+		status.Set(2, String().Cat() << "Test " << target << ": " << (pass ? "PASS" : "FAIL") << " (" << ms << "ms)", 200);
+	};
+
+	if (agent.Connect()) {
+		status.Set(1, "AgentIPC: Connected (7421)", 160);
+	}
+
 	Add(ai_assistant.SizePos());
 }
 

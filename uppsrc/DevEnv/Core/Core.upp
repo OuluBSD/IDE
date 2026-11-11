@@ -8,4 +8,6 @@ file
 	BuildEvents.h,
 	CompilerMessage.h,
 	PortageManager.h,
-	PortageManager.cpp;
+	PortageManager.cpp,
+	AgentBridge.h,
+	AgentBridge.cpp;

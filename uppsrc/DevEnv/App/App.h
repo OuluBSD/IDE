@@ -2,6 +2,7 @@
 #define _DevEnv_App_App_h_
 
 #include <DevEnv/Ctrl/Lib/Lib.h>
+#include <DevEnv/Core/Core.h>
 
 #ifdef flagAI
 #include <SuperIntelligence/Ctrl/Ctrl.h>
@@ -23,10 +24,13 @@ public:
 
 private:
 	MenuBar         menu;
+	StatusBar       status;
 	AiAssistantCtrl ai_assistant;
+	AgentBridge     agent;
 };
 
 }
 }
 
 #endif
+

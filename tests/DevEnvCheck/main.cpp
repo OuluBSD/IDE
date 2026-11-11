@@ -110,6 +110,63 @@ CONSOLE_APP_MAIN
 		Cout() << "PASS: PortageManager model & VDB resolution verified (" << pkgs.GetCount() << " packages indexed)\n";
 	}
 
+	// 4. Test AgentBridge IPC & Event Dispatch
+	Cout() << "\n[4] Testing AgentBridge IPC & Background Event Dispatch...\n";
+	{
+		AgentMessage msg;
+		msg.type = "test_result";
+		msg.target = "autotest/Bits";
+		msg.status = "pass";
+		msg.duration_ms = 45;
+		msg.message = "All assertions passed";
+
+		String json = msg.ToJson();
+		ASSERT(!json.IsEmpty());
+		ASSERT(json.Find("autotest/Bits") >= 0);
+		ASSERT(json.Find("pass") >= 0);
+
+		AgentMessage parsed = AgentMessage::FromJson(json);
+		ASSERT(parsed.type == "test_result");
+		ASSERT(parsed.target == "autotest/Bits");
+		ASSERT(parsed.status == "pass");
+		ASSERT(parsed.duration_ms == 45);
+
+		// Test Frame formatting and parsing
+		ValueMap payload;
+		payload.Add("compiler", "clang++");
+		payload.Add("jobs", 8);
+		String frame = AgentBridge::FormatFrame("agent_status", payload);
+		ASSERT(frame.Find("clang++") >= 0);
+
+		String out_type;
+		ValueMap out_payload;
+		bool ok = AgentBridge::ParseFrame(frame, out_type, out_payload);
+		ASSERT(ok);
+		ASSERT(out_type == "agent_status");
+		ASSERT(out_payload["compiler"] == "clang++");
+
+		// Test Bridge Event Callback and Background Test Runner
+		AgentBridge bridge;
+		bool test_cb_fired = false;
+		String cb_target;
+		bool cb_ok = false;
+
+		bridge.WhenTestResult = [&](const String& target, bool pass, int ms) {
+			test_cb_fired = true;
+			cb_target = target;
+			cb_ok = pass;
+			ASSERT(ms >= 0);
+		};
+
+		bool test_run = bridge.TriggerBackgroundTest("autotest/Bits");
+		ASSERT(test_run);
+		ASSERT(test_cb_fired);
+		ASSERT(cb_target == "autotest/Bits");
+		ASSERT(cb_ok);
+
+		Cout() << "PASS: AgentBridge IPC, JSON framing & background test dispatch verified\n";
+	}
+
 	Cout() << "\n========================================\n";
 	Cout() << "ALL DevEnvCheck TESTS PASSED SUCCESSFULLY!\n";
 	Cout() << "========================================\n";

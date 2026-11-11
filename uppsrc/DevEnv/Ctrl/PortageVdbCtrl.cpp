@@ -49,6 +49,24 @@ PortageVdbCtrl::PortageVdbCtrl()
 	btn_refresh.WhenAction = THISBACK(Reload);
 	details_pane.Add(btn_refresh.RightPos(4, 80).BottomPos(4, 32));
 
+	lbl_agent_status.SetText("AgentIPC: Offline");
+	lbl_agent_status.SetInk(Gray());
+	details_pane.Add(lbl_agent_status.LeftPos(4, 180).BottomPos(42, 20));
+
+	lbl_test_status.SetText("Tests: Idle");
+	lbl_test_status.SetInk(Gray());
+	details_pane.Add(lbl_test_status.LeftPos(190, 220).BottomPos(42, 20));
+
+	agent_bridge.WhenTestResult = [this](const String& target, bool pass, int ms) {
+		lbl_test_status.SetText(String().Cat() << "Test [" << target << "]: " << (pass ? "PASS" : "FAIL") << " (" << ms << " ms)");
+		lbl_test_status.SetInk(pass ? LtGreen() : LtRed());
+	};
+
+	if (agent_bridge.Connect()) {
+		lbl_agent_status.SetText("AgentIPC: Connected (7421)");
+		lbl_agent_status.SetInk(LtGreen());
+	}
+
 	// Setup Console Pane
 	lbl_console.SetText("Process Execution Log:");
 	console_pane.Add(lbl_console.LeftPos(4, 200).TopPos(4, 20));
@@ -158,6 +176,16 @@ void PortageVdbCtrl::DoTest()
 	String log;
 	bool ok = pm.RunTest(atom, &log);
 	txt_console.SetData(log);
+
+	AgentMessage msg;
+	msg.type = "test_result";
+	msg.target = atom;
+	msg.status = ok ? "pass" : "fail";
+	msg.message = ok ? "Test suite passed" : "Test suite failed";
+	agent_bridge.SendEvent(msg);
+	if (agent_bridge.WhenTestResult) {
+		agent_bridge.WhenTestResult(atom, ok, 0);
+	}
 }
 
 void PortageVdbCtrl::DoUnmerge()
@@ -188,6 +216,16 @@ void PortageVdbCtrl::DoRunAllTests()
 	String log;
 	bool ok = pm.RunTest("@installed", &log);
 	txt_console.SetData(log);
+
+	AgentMessage msg;
+	msg.type = "test_result";
+	msg.target = "@installed";
+	msg.status = ok ? "pass" : "fail";
+	msg.message = ok ? "Test suite passed" : "Test suite failed";
+	agent_bridge.SendEvent(msg);
+	if (agent_bridge.WhenTestResult) {
+		agent_bridge.WhenTestResult("@installed", ok, 0);
+	}
 }
 
 void RunOverlayManager()

@@ -43,6 +43,9 @@ private:
 	Button                btn_unmerge;
 	Button                btn_all_tests;
 	Button                btn_refresh;
+	Label                 lbl_agent_status;
+	Label                 lbl_test_status;
+	AgentBridge           agent_bridge;
 
 	// Right bottom panel (Console log)
 	ParentCtrl            console_pane;
