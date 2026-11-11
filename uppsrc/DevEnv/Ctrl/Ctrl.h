@@ -6,6 +6,9 @@
 
 #include "AiAssistantCtrl.h"
 #include "PortageVdbCtrl.h"
+#include "VfsExplorerCtrl.h"
+#include "WorkbenchTerminalCtrl.h"
+#include "WorkbenchCtrl.h"
 
 namespace Upp {
 namespace DevEnv {

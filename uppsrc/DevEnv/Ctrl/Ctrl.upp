@@ -11,4 +11,10 @@ file
 	AiAssistantCtrl.h,
 	AiAssistantCtrl.cpp,
 	PortageVdbCtrl.h,
-	PortageVdbCtrl.cpp;
+	PortageVdbCtrl.cpp,
+	VfsExplorerCtrl.h,
+	VfsExplorerCtrl.cpp,
+	WorkbenchTerminalCtrl.h,
+	WorkbenchTerminalCtrl.cpp,
+	WorkbenchCtrl.h,
+	WorkbenchCtrl.cpp;

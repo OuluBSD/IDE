@@ -2,6 +2,7 @@
 #define _DevEnv_App_App_h_
 
 #include <DevEnv/Ctrl/Lib/Lib.h>
+#include <DevEnv/Ctrl/Ctrl.h>
 #include <DevEnv/Core/Core.h>
 
 #ifdef flagAI
@@ -20,12 +21,13 @@ public:
 	void MainMenu(Bar& bar);
 	void FileMenu(Bar& bar);
 	void PackagesMenu(Bar& bar);
+	void TerminalMenu(Bar& bar);
 	void AiMenu(Bar& bar);
 
 private:
 	MenuBar         menu;
 	StatusBar       status;
-	AiAssistantCtrl ai_assistant;
+	WorkbenchCtrl   workbench;
 	AgentBridge     agent;
 };
 

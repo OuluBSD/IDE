@@ -25,13 +25,14 @@ AppWindow::AppWindow()
 		status.Set(1, "AgentIPC: Connected (7421)", 160);
 	}
 
-	Add(ai_assistant.SizePos());
+	Add(workbench.SizePos());
 }
 
 void AppWindow::MainMenu(Bar& bar)
 {
 	bar.Sub("File", THISBACK(FileMenu));
 	bar.Sub("Packages", THISBACK(PackagesMenu));
+	bar.Sub("Terminal", THISBACK(TerminalMenu));
 #ifdef flagAI
 	bar.Sub("AI", THISBACK(AiMenu));
 #endif
@@ -40,6 +41,19 @@ void AppWindow::MainMenu(Bar& bar)
 void AppWindow::FileMenu(Bar& bar)
 {
 	bar.Add("Exit", [this] { Break(); });
+}
+
+void AppWindow::TerminalMenu(Bar& bar)
+{
+	bar.Add("Run All Tests (@installed)", [this] {
+		workbench.GetTerminal().ExecuteCommand("uppbuilder test @installed");
+	});
+	bar.Add("Run Upstream Tests (@autotest)", [this] {
+		workbench.GetTerminal().ExecuteCommand("uppbuilder test @autotest");
+	});
+	bar.Add("Clear Terminal Output", [this] {
+		workbench.GetTerminal().Clear();
+	});
 }
 
 void AppWindow::PackagesMenu(Bar& bar)
