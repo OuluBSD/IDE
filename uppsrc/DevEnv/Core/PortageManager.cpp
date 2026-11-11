@@ -5,20 +5,47 @@ namespace DevEnv {
 
 String PortageManager::GetVdbDir()
 {
+	String base;
 	String custom = GetEnv("UPPBUILDER_VDB_DIR");
-	if (!custom.IsEmpty()) return custom;
-
+	if (!custom.IsEmpty()) base = custom;
+	else {
 #ifdef PLATFORM_WIN32
-	String appdata = GetEnv("APPDATA");
-	if (!appdata.IsEmpty()) return AppendFileName(appdata, "uppbuilder/vdb");
-	return "C:\\uppbuilder\\vdb";
+		String appdata = GetEnv("APPDATA");
+		if (!appdata.IsEmpty()) base = AppendFileName(appdata, "uppbuilder/vdb");
+		else base = "C:\\uppbuilder\\vdb";
 #else
-	String xdg = GetEnv("XDG_CONFIG_HOME");
-	if (!xdg.IsEmpty()) return AppendFileName(xdg, "uppbuilder/vdb");
-	String home = GetEnv("HOME");
-	if (!home.IsEmpty()) return AppendFileName(home, ".config/uppbuilder/vdb");
-	return "/var/db/uppbuilder/vdb";
+		String xdg = GetEnv("XDG_CONFIG_HOME");
+		if (!xdg.IsEmpty()) base = AppendFileName(xdg, "uppbuilder/vdb");
+		else {
+			String home = GetEnv("HOME");
+			if (!home.IsEmpty()) base = AppendFileName(home, ".config/uppbuilder/vdb");
+			else base = "/var/db/uppbuilder/vdb";
+		}
 #endif
+	}
+
+	// Check active profile file
+	String active_profile = "NativeClang";
+	String cfg_dir = GetFileFolder(base);
+	String active_file = AppendFileName(cfg_dir, "active_profile");
+	if (FileExists(active_file)) {
+		String p = TrimBoth(LoadFile(active_file));
+		if (!p.IsEmpty()) active_profile = p;
+	}
+
+	String profile_dir = AppendFileName(base, active_profile);
+	if (DirectoryExists(profile_dir)) return profile_dir;
+
+	// Fallback to checking any subfolder in base
+	FindFile ff(AppendFileName(base, "*"));
+	while (ff) {
+		if (ff.IsFolder() && !ff.GetName().StartsWith(".")) {
+			return ff.GetPath();
+		}
+		ff.Next();
+	}
+
+	return base;
 }
 
 String PortageManager::GetOverlayDir()
