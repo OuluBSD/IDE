@@ -1,0 +1,9 @@
+uses
+	Core,
+	DevEnv/Core;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "";

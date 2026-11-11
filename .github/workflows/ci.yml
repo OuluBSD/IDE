@@ -134,6 +134,12 @@ jobs:
         run: |
           xvfb-run -a IDE/bin/App --test
 
+      - name: Build & Run DevEnvCheck (${{ matrix.bm }})
+        run: |
+          cd IDE
+          uppbuilder tests/DevEnvCheck -m ${{ matrix.bm }} -v
+          ./bin/DevEnvCheck
+
   build-windows:
     name: Windows (windows-latest - MSVC)
     runs-on: windows-latest
@@ -257,3 +263,10 @@ jobs:
               exit /b 1
           )
           dir IDE\bin\App.exe
+
+      - name: Build & Run DevEnvCheck (MSVC)
+        shell: cmd
+        run: |
+          cd IDE
+          uppbuilder.exe tests/DevEnvCheck -m MSVS22x64 -v
+          bin\DevEnvCheck.exe
