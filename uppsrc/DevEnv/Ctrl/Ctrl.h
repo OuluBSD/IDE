@@ -5,6 +5,7 @@
 #include <DevEnv/Draw/Draw.h>
 
 #include "AiAssistantCtrl.h"
+#include "PortageVdbCtrl.h"
 
 namespace Upp {
 namespace DevEnv {

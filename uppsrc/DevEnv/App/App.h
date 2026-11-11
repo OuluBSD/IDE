@@ -18,6 +18,7 @@ public:
 
 	void MainMenu(Bar& bar);
 	void FileMenu(Bar& bar);
+	void PackagesMenu(Bar& bar);
 	void AiMenu(Bar& bar);
 
 private:

@@ -74,6 +74,42 @@ CONSOLE_APP_MAIN
 		Cout() << "PASS: BuildEvents dispatch verified\n";
 	}
 
+	// 3. Test PortageManager Data Model & VDB Resolution
+	Cout() << "\n[3] Testing PortageManager Model & Package Resolution...\n";
+	{
+		PortageManager pm;
+		String vdb = PortageManager::GetVdbDir();
+		ASSERT(!vdb.IsEmpty());
+
+		String overlay = PortageManager::GetOverlayDir();
+		ASSERT(!overlay.IsEmpty());
+
+		// Test package lookup
+		PortagePackage basic_html;
+		bool found = pm.IsInstalled("DevCpp/BasicHtmlRenderer", &basic_html);
+		ASSERT(found);
+		ASSERT(basic_html.atom == "DevCpp/BasicHtmlRenderer");
+		ASSERT(basic_html.category == "DevCpp");
+		ASSERT(basic_html.name == "BasicHtmlRenderer");
+		ASSERT(basic_html.installed);
+
+		// Test package listing
+		Vector<PortagePackage> pkgs = pm.ListPackages();
+		ASSERT(pkgs.GetCount() > 0);
+
+		bool saw_basichtml = false;
+		for (const auto& p : pkgs) {
+			if (p.atom == "DevCpp/BasicHtmlRenderer") {
+				saw_basichtml = true;
+				ASSERT(p.installed);
+				break;
+			}
+		}
+		ASSERT(saw_basichtml);
+
+		Cout() << "PASS: PortageManager model & VDB resolution verified (" << pkgs.GetCount() << " packages indexed)\n";
+	}
+
 	Cout() << "\n========================================\n";
 	Cout() << "ALL DevEnvCheck TESTS PASSED SUCCESSFULLY!\n";
 	Cout() << "========================================\n";

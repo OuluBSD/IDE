@@ -4,5 +4,6 @@
 #include <Core/Core.h>
 #include "CompilerMessage.h"
 #include "BuildEvents.h"
+#include "PortageManager.h"
 
 #endif

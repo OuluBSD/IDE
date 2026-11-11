@@ -6,4 +6,6 @@ uses
 file
 	Core.h,
 	BuildEvents.h,
-	CompilerMessage.h;
+	CompilerMessage.h,
+	PortageManager.h,
+	PortageManager.cpp;

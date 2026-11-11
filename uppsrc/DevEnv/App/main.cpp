@@ -18,6 +18,7 @@ AppWindow::AppWindow()
 void AppWindow::MainMenu(Bar& bar)
 {
 	bar.Sub("File", THISBACK(FileMenu));
+	bar.Sub("Packages", THISBACK(PackagesMenu));
 #ifdef flagAI
 	bar.Sub("AI", THISBACK(AiMenu));
 #endif
@@ -26,6 +27,19 @@ void AppWindow::MainMenu(Bar& bar)
 void AppWindow::FileMenu(Bar& bar)
 {
 	bar.Add("Exit", [this] { Break(); });
+}
+
+void AppWindow::PackagesMenu(Bar& bar)
+{
+	bar.Add("Portage Overlay & VDB Manager...", [] {
+		RunOverlayManager();
+	});
+	bar.Add("Run All Installed Tests...", [] {
+		PortageManager pm;
+		String log;
+		pm.RunTest("@installed", &log);
+		PromptOK(DeQtf(log));
+	});
 }
 
 #ifdef flagAI

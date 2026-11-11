@@ -9,4 +9,6 @@ uses(AI) SuperIntelligence/Ctrl, SweAgent;
 file
 	Ctrl.h,
 	AiAssistantCtrl.h,
-	AiAssistantCtrl.cpp;
+	AiAssistantCtrl.cpp,
+	PortageVdbCtrl.h,
+	PortageVdbCtrl.cpp;
